@@ -13,7 +13,7 @@ def auth_required(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         if not check_auth():
-            st.switch_page("pages/login.py")
+            st.switch_page("pages/_login.py")
         return func(*args, **kwargs)
 
     return wrapper
@@ -31,4 +31,4 @@ def logout():
     """Clear authentication state"""
     st.session_state.is_authenticated = False
     st.session_state.user = None
-    st.switch_page("pages/login.py")
+    st.switch_page("pages/_login.py")

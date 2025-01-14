@@ -1,6 +1,7 @@
 import streamlit as st
 from PIL import Image
 from utils.auth_helper import auth_required
+import plotly.graph_objects as go
 
 
 @auth_required
@@ -8,8 +9,46 @@ def overview_page():
     # Page config
     st.set_page_config(page_title="Overview", page_icon="🏠", layout="centered")
 
-    # Main content
-    st.title(f"Welcome back, {st.session_state.user['first_name']}!")
+    # Data points
+    x = ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"]
+    y = [0, 10, 20, 30, 43]
+
+    # Create the graph
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode='lines+markers',
+        line=dict(color='#4B89DC', width=3),  # Modern blue line
+        marker=dict(
+            size=12,
+            color='#E74C3C',  # Red markers
+            line=dict(width=2, color='white')  # White border around markers
+        )
+    ))
+
+    # Clean, minimal layout
+    fig.update_layout(
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        showlegend=False,
+        margin=dict(t=40, b=40, l=40, r=40),
+        xaxis=dict(
+            showgrid=False,
+            showticklabels=False,
+            showline=False,
+            zeroline=False
+        ),
+        yaxis=dict(
+            showgrid=False,
+            showticklabels=False,
+            showline=False,
+            zeroline=False
+        )
+    )
+
+    # Display in Streamlit
+    st.plotly_chart(fig, use_container_width=True)
 
     # Wellbeing Score Section
     st.header("Wellbeing Score")

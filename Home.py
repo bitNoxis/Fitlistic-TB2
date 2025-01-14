@@ -14,6 +14,6 @@ if 'is_authenticated' not in st.session_state:
 
 # Check authentication status and redirect accordingly
 if not st.session_state.is_authenticated:
-    st.switch_page("pages/login.py")
+    st.switch_page("pages/_login.py")
 else:
     st.switch_page("pages/1_🏠_Overview.py")

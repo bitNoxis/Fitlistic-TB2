@@ -8,30 +8,42 @@ from datetime import datetime, timezone
 @st.cache_resource
 def init_connection():
     """Initialize MongoDB connection using cached resource"""
-    username = st.secrets['username']
-    password = st.secrets['password']
-
     try:
+        # Get credentials from secrets
+        username = st.secrets['username']
+        password = st.secrets['password']
+
+        # Simple connection string
+        uri = (
+            "mongodb+srv://"
+            f"{username}:{password}@"
+            "cluster0.wbd1o.mongodb.net/"
+            "?retryWrites=true&w=majority"
+        )
+
+        # Create client with minimal configuration
         client = MongoClient(
-            f"mongodb+srv://{username}:{password}@cluster0.wbd1o.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0",
+            uri,
             server_api=ServerApi('1')
         )
-        # Verify connection with clear ping message
+
+        # Test connection
         client.admin.command('ping')
-        print("✅ MongoDB Connection successful! Database is ready.")
+        print("✅ Connected to MongoDB")
         return client
+
     except Exception as e:
-        print(f"❌ Database connection failed: {str(e)}")
-        st.error(f"Database connection failed: {str(e)}")
+        print(f"❌ Connection failed: {str(e)}")
+        st.error(f"Database connection failed")
         return None
 
 
 def get_collection(database_name: str, collection_name: str):
     """Get MongoDB collection with error handling"""
     client = init_connection()
-    if client:
-        return client[database_name][collection_name]
-    return None
+    if client is None:  # Explicitly check for None
+        return None
+    return client[database_name][collection_name]
 
 
 def hash_password(password: str) -> tuple:
@@ -46,92 +58,68 @@ def verify_password(password: str, hashed_password: bytes) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password)
 
 
-class UserManager:
-    def __init__(self):
-        self.collection = get_collection("fitlistic", "users")
+def create_user(username: str, password: str, user_data: dict = None) -> tuple[bool, str]:
+    """Create new user with hashed password"""
+    collection = get_collection("fitlistic", "users")
+    if collection is None:  # Explicitly check for None
+        return False, "Database connection failed"
 
-    def create_user(self, username: str, password: str, user_data: dict = None) -> tuple[bool, str]:
-        """
-        Create new user with hashed password
+    try:
+        # Check if username exists
+        existing_user = collection.find_one({"username": username.lower()})
+        if existing_user is not None:  # Explicitly check for None
+            return False, "Username already exists"
 
-        Args:
-            username: Username for new user
-            password: Password for new user
-            user_data: Optional dictionary containing additional user data
-                      (e.g., email, first_name, last_name, etc.)
+        # Check if email exists
+        if user_data and 'email' in user_data:
+            existing_email = collection.find_one({"email": user_data['email'].lower()})
+            if existing_email is not None:  # Explicitly check for None
+                return False, "Email already registered"
 
-        Returns:
-            tuple: (success: bool, message: str)
-        """
-        try:
-            # Check if username exists
-            if self.collection.find_one({"username": username.lower()}):
-                return False, "Username already exists"
+        # Hash password
+        hashed_pw, salt = hash_password(password)
 
-            # Check if email exists (if provided)
-            if user_data and 'email' in user_data:
-                if self.collection.find_one({"email": user_data['email'].lower()}):
-                    return False, "Email already registered"
+        # Prepare user document
+        user_document = {
+            "username": username.lower(),
+            "password": hashed_pw,
+            "salt": salt,
+            "created_at": datetime.now(timezone.utc),
+            "last_login": datetime.now(timezone.utc),
+            "total_workouts": 0,
+            "workout_history": []
+        }
 
-            # Hash password
-            hashed_pw, salt = hash_password(password)
+        if user_data:
+            if 'email' in user_data:
+                user_data['email'] = user_data['email'].lower()
+            user_document.update(user_data)
 
-            # Get current UTC time
-            current_utc = datetime.now(timezone.utc)
-
-            # Prepare base user document
-            user_document = {
-                "username": username.lower(),
-                "password": hashed_pw,
-                "salt": salt,
-                "created_at": current_utc,
-                "last_login": current_utc,
-                "total_workouts": 0,
-                "workout_history": []
-            }
-
-            # Add additional user data if provided
-            if user_data:
-                # Convert email to lowercase if it exists
-                if 'email' in user_data:
-                    user_data['email'] = user_data['email'].lower()
-                user_document.update(user_data)
-
-            # Insert user into database
-            self.collection.insert_one(user_document)
+        # Insert user
+        result = collection.insert_one(user_document)
+        if result.inserted_id:
             return True, "User created successfully"
+        return False, "Failed to create user"
 
-        except Exception as e:
-            return False, f"Error creating user: {str(e)}"
+    except Exception as e:
+        return False, str(e)
 
-    def validate_login(self, username: str, password: str) -> tuple[bool, dict | None]:
-        """Validate user login credentials"""
-        try:
-            user = self.collection.find_one({"username": username.lower()})
-            if user and verify_password(password, user["password"]):
-                # Update last login time with UTC
-                self.collection.update_one(
-                    {"username": username.lower()},
-                    {"$set": {"last_login": datetime.now(timezone.utc)}}
-                )
-                return True, user
-            return False, None
-        except Exception as e:
-            print(f"Login validation error: {e}")
-            return False, None
 
-    def update_user_profile(self, username: str, update_data: dict) -> bool:
-        """Update user profile information"""
-        try:
-            # Ensure email is lowercase if it's being updated
-            if 'email' in update_data:
-                update_data['email'] = update_data['email'].lower()
+def validate_login(username: str, password: str) -> tuple[bool, dict | None]:
+    """Validate user login credentials"""
+    collection = get_collection("fitlistic", "users")
+    if collection is None:  # Explicitly check for None
+        return False, None
 
-            result = self.collection.update_one(
+    try:
+        user = collection.find_one({"username": username.lower()})
+        if user is not None and verify_password(password, user["password"]):  # Explicitly check for None
+            # Update last login time
+            collection.update_one(
                 {"username": username.lower()},
-                {"$set": update_data}
+                {"$set": {"last_login": datetime.now(timezone.utc)}}
             )
-            return result.modified_count > 0
-        except Exception as e:
-            print(f"Profile update error: {e}")
-            return False
+            return True, user
+        return False, None
+    except Exception:
+        return False, None
