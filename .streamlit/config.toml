@@ -6,8 +6,7 @@ gatherUsageStats = false
 
 [client]
 toolbarMode = "minimal"
-showSidebarNavigation = false
-
+  
 [theme]
 primaryColor = "#FF4B4B"
 backgroundColor = "white"

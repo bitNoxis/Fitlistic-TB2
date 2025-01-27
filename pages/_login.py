@@ -87,4 +87,4 @@ with st.container():
 
     with col2:
         if st.button("Register", use_container_width=True):
-            st.switch_page("pages/_register.py")
+            st.switch_page("pages/_Register.py")
