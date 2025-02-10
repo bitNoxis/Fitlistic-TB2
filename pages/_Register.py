@@ -2,6 +2,7 @@ import streamlit as st
 from utils.mongo_helper import create_user
 import re
 
+
 # Page config
 st.set_page_config(
     page_title="Fitlistic - Register",
