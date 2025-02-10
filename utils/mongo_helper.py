@@ -1,8 +1,10 @@
-import streamlit as st
+# utils/mongo_helper.py
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
+import streamlit as st
 import bcrypt
 from datetime import datetime, timezone
+import json
 
 
 @st.cache_resource
@@ -39,7 +41,6 @@ def init_connection():
 
 
 def get_collection(database_name: str, collection_name: str):
-    """Get MongoDB collection with error handling"""
     client = init_connection()
     if client is None:  # Explicitly check for None
         return None
@@ -47,7 +48,6 @@ def get_collection(database_name: str, collection_name: str):
 
 
 def hash_password(password: str) -> tuple:
-    """Hash password using bcrypt with salt"""
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed, salt
@@ -123,3 +123,84 @@ def validate_login(username: str, password: str) -> tuple[bool, dict | None]:
         return False, None
     except Exception:
         return False, None
+
+
+# Additional functions for fitness plan management
+def save_user_plan(user_id: str, plan_data: dict):
+    """Save a user's workout plan"""
+    collection = get_collection("fitlistic", "user_plans")
+    if collection is None:
+        return False, "Database connection failed"
+
+    try:
+        # Deactivate old plans
+        collection.update_many(
+            {"user_id": user_id, "is_active": True},
+            {"$set": {"is_active": False}}
+        )
+
+        # Create new plan document
+        plan_document = {
+            "user_id": user_id,
+            "plan_data": plan_data,
+            "created_at": datetime.now(timezone.utc),
+            "is_active": True,
+            "completion_status": {day: False for day in plan_data['schedule'].keys()}
+        }
+
+        result = collection.insert_one(plan_document)
+        return True, str(result.inserted_id)
+
+    except Exception as e:
+        return False, str(e)
+
+
+def get_active_plan(user_id: str):
+    """Get user's active workout plan"""
+    collection = get_collection("fitlistic", "user_plans")
+    if collection is None:
+        return None
+
+    try:
+        return collection.find_one({
+            "user_id": user_id,
+            "is_active": True
+        })
+    except Exception:
+        return None
+
+
+def initialize_fitness_collections():
+    """Initialize fitness-related collections with sample data"""
+    client = init_connection()
+    if client is None:
+        return False
+
+    db = client['fitlistic']
+
+    try:
+        # Initialize collections if empty
+        collections_data = {
+            'exercises': 'exercises.json',
+            'breathwork_techniques': 'breathwork_techniques.json',
+            'meditation_templates': 'meditation_templates.json',
+            'stretching_routines': 'stretching_routines.json'
+        }
+
+        for coll_name, filename in collections_data.items():
+            if db[coll_name].count_documents({}) == 0:
+                try:
+                    with open(f'data/{filename}', 'r') as f:
+                        data = json.load(f)
+                        db[coll_name].insert_many(data)
+                        print(f"✅ Initialized {coll_name} collection")
+                except FileNotFoundError:
+                    print(f"❌ File not found: data/{filename}")
+                except Exception as e:
+                    print(f"❌ Error loading {filename}: {str(e)}")
+
+        return True
+
+    except Exception as e:
+        print(f"Error initializing collections: {str(e)}")
+        return False
