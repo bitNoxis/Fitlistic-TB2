@@ -31,7 +31,7 @@ st.markdown("""
         .stDeployButton {display: none !important;}
         section[data-testid="stSidebar"] {display: none !important;}
 
-        /* Keep the rest of your theme styling */
+        /* Keep the rest of the theme styling */
         .stButton > button {
             width: 100%;
             border-radius: 5px;
@@ -45,16 +45,15 @@ if st.session_state.is_authenticated:
     st.switch_page("pages/1_🏠_Overview.py")
 
 # Create three columns for centering
-col1, col2, col3 = st.columns([3, 1, 3])
-
-# Use the middle column for logo and title
-with col2:
+colA, colB, colC = st.columns([1, 2, 1])
+with colB:
     try:
-        st.image("images/Logo.png", width=120)
+        st.image("images/Logo.png", width=120, use_container_width=True)
     except:
         st.title("Fitlistic")
 
-st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Welcome Back!</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Welcome Back to Fitlistic!</h1>",
+                unsafe_allow_html=True)
 
 # Add some spacing
 st.write("")

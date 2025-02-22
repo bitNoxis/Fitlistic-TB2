@@ -1,5 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
+
+from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 
 
@@ -7,6 +9,7 @@ from utils.auth_helper import auth_required
 def reminder_page():
     # Page config
     st.set_page_config(page_title="Reminder", page_icon="📅", layout="centered")
+    inject_custom_styles()
 
     # Initialize reminders if needed
     if 'reminders' not in st.session_state:

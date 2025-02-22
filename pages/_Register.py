@@ -2,8 +2,9 @@ import streamlit as st
 from utils.mongo_helper import create_user
 import re
 
-
-# Page config
+# -----------------------------
+# PAGE CONFIG & CSS
+# -----------------------------
 st.set_page_config(
     page_title="Fitlistic - Register",
     page_icon="💪",
@@ -11,34 +12,31 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.markdown("""
+st.markdown(
+    """
     <style>
-        /* Hide sidebar navigation */
+        /* Hide Streamlit's default sidebar & header elements */
         div[data-testid="stSidebarNav"] {display: none !important;}
-
-        /* Hide menu button */
         button[kind="header"] {display: none !important;}
-
-        /* Hide hamburger menu */
         .stApp > header {display: none !important;}
-
-        /* Hide Streamlit footer */
         footer {display: none !important;}
-
-        /* Optional: Hide all navigation elements */
         .stDeployButton {display: none !important;}
         section[data-testid="stSidebar"] {display: none !important;}
 
-        /* Keep the rest of your theme styling */
+        /* Make buttons bigger/wider */
         .stButton > button {
             width: 100%;
             border-radius: 5px;
             height: 2.5rem;
         }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
 
-# Initialize session state for form fields and touched states
+# -----------------------------
+# SESSION STATE
+# -----------------------------
 if 'form_data' not in st.session_state:
     st.session_state.form_data = {
         'first_name': '',
@@ -55,8 +53,12 @@ if 'form_data' not in st.session_state:
 if 'touched' not in st.session_state:
     st.session_state.touched = {}
 
+form_data = st.session_state.form_data
 
-# Validation functions
+
+# -----------------------------
+# VALIDATION FUNCTIONS
+# -----------------------------
 def validate_email(email):
     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         return "Please enter a valid email address"
@@ -81,84 +83,112 @@ def validate_required(value, field_name):
     return None
 
 
-# Create three columns for centering
-col1, col2, col3 = st.columns([1, 2, 1])
-
-# Use the middle column for logo and title
-with col2:
+# -----------------------------
+# CENTER LOGO & TITLE
+# -----------------------------
+colA, colB, colC = st.columns([1, 2, 1])
+with colB:
     try:
         st.image("images/Logo.png", width=120, use_container_width=True)
     except:
         st.title("Fitlistic")
-    st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Create Account</h1>", unsafe_allow_html=True)
 
-# Add some spacing
-st.write("")
+    st.markdown(
+        "<h1 style='text-align: center; font-size: 2rem;'>Create Account</h1>",
+        unsafe_allow_html=True
+    )
 
-# Registration Form
-col1, col2 = st.columns(2)
+st.write("")  # spacing
 
-with col1:
-    # First Name
-    first_name = st.text_input("First Name", key="first_name")
-    if first_name:
-        st.session_state.touched['first_name'] = True
-    if st.session_state.touched.get('first_name', False) and not first_name:
-        st.error("First Name is required")
+# ------------------------------------------------
+# ROW 1: FIRST NAME (LEFT), LAST NAME (RIGHT)
+# ------------------------------------------------
+r1c1, r1c2 = st.columns(2)
 
-    # Username
-    username = st.text_input("Username", key="username").strip().lower()
-    if username:
-        st.session_state.touched['username'] = True
-    if st.session_state.touched.get('username', False) and not username:
-        st.error("Username is required")
+first_name = r1c1.text_input("First Name", key="first_name")
+if first_name:
+    st.session_state.touched['first_name'] = True
+if st.session_state.touched.get('first_name', False) and not first_name:
+    r1c1.error("First Name is required")
 
-    # Password
-    password = st.text_input("Password", type="password", key="password")
-    if password:
-        st.session_state.touched['password'] = True
-    if st.session_state.touched.get('password', False):
-        error = validate_password(password)
-        if error:
-            st.error(error)
+last_name = r1c2.text_input("Last Name", key="last_name")
+if last_name:
+    st.session_state.touched['last_name'] = True
+if st.session_state.touched.get('last_name', False) and not last_name:
+    r1c2.error("Last Name is required")
 
-    height = st.number_input("Height (cm)", min_value=100, max_value=250, value=170)
+# ------------------------------------------------
+# ROW 2: USERNAME (LEFT), EMAIL (RIGHT)
+# ------------------------------------------------
+r2c1, r2c2 = st.columns(2)
 
-with col2:
-    # Last Name
-    last_name = st.text_input("Last Name", key="last_name")
-    if last_name:
-        st.session_state.touched['last_name'] = True
-    if st.session_state.touched.get('last_name', False) and not last_name:
-        st.error("Last Name is required")
+username = r2c1.text_input("Username", key="username").strip().lower()
+if username:
+    st.session_state.touched['username'] = True
+if st.session_state.touched.get('username', False) and not username:
+    r2c1.error("Username is required")
 
-    # Email
-    email = st.text_input("Email", key="email").strip().lower()
-    if email:
-        st.session_state.touched['email'] = True
-    if st.session_state.touched.get('email', False):
-        error = validate_email(email)
-        if error:
-            st.error(error)
+email = r2c2.text_input("Email", key="email").strip().lower()
+if email:
+    st.session_state.touched['email'] = True
+if st.session_state.touched.get('email', False):
+    email_error = validate_email(email)
+    if email_error:
+        r2c2.error(email_error)
 
-    # Confirm Password
-    password_confirm = st.text_input("Confirm Password", type="password", key="password_confirm")
-    if password_confirm:
-        st.session_state.touched['password_confirm'] = True
-    if st.session_state.touched.get('password_confirm', False):
-        error = validate_passwords_match(password, password_confirm)
-        if error:
-            st.error(error)
+# ------------------------------------------------
+# ROW 3: PASSWORD (LEFT), CONFIRM (RIGHT)
+# ------------------------------------------------
+r3c1, r3c2 = st.columns(2)
 
-    weight = st.number_input("Weight (kg)", min_value=30, max_value=200, value=70)
+password = r3c1.text_input("Password", type="password", key="password")
+if password:
+    st.session_state.touched['password'] = True
+if st.session_state.touched.get('password', False):
+    pw_error = validate_password(password)
+    if pw_error:
+        r3c1.error(pw_error)
 
-# Fitness goals selection
+password_confirm = r3c2.text_input("Confirm Password", type="password", key="password_confirm")
+if password_confirm:
+    st.session_state.touched['password_confirm'] = True
+if st.session_state.touched.get('password_confirm', False):
+    match_error = validate_passwords_match(password, password_confirm)
+    if match_error:
+        r3c2.error(match_error)
+
+# ------------------------------------------------
+# ROW 4: HEIGHT (LEFT), WEIGHT (RIGHT)
+# ------------------------------------------------
+r4c1, r4c2 = st.columns(2)
+height = r4c1.number_input("Height (cm)", min_value=100, max_value=250, value=form_data['height'])
+weight = r4c2.number_input("Weight (kg)", min_value=30, max_value=200, value=form_data['weight'])
+
+# ------------------------------------------------
+# Fitness Goals (single row)
+# ------------------------------------------------
 goals = st.multiselect(
     "Your Fitness Goals",
-    ["Weight Loss", "Muscle Gain", "Flexibility", "Endurance", "General Fitness"]
+    ["Weight Loss", "Muscle Gain", "Flexibility", "Endurance", "General Fitness"],
+    default=form_data['goals']
 )
 
-# Check if form is valid
+# Update form_data after collecting inputs
+form_data.update({
+    'first_name': first_name,
+    'last_name': last_name,
+    'username': username,
+    'email': email,
+    'password': password,
+    'password_confirm': password_confirm,
+    'height': height,
+    'weight': weight,
+    'goals': goals
+})
+
+# ------------------------------------------------
+# FORM VALIDATION (create_button disabled logic)
+# ------------------------------------------------
 form_is_valid = all([
     first_name, last_name, username, email,
     password, password_confirm,
@@ -167,7 +197,9 @@ form_is_valid = all([
     re.match(r"[^@]+@[^@]+\.[^@]+", email)
 ])
 
-# Buttons vertically aligned
+# ------------------------------------------------
+# Buttons
+# ------------------------------------------------
 if st.button("Create Account", type="primary", use_container_width=True, disabled=not form_is_valid):
     user_data = {
         "email": email,
@@ -180,7 +212,6 @@ if st.button("Create Account", type="primary", use_container_width=True, disable
     }
 
     success, message = create_user(username, password, user_data)
-
     if success:
         st.success("Account created successfully! Redirecting to login...")
         st.switch_page("pages/_login.py")

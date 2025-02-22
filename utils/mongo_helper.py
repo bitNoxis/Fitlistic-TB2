@@ -68,7 +68,7 @@ def create_user(username: str, password: str, user_data: dict = None) -> tuple[b
         # Check if username exists
         existing_user = collection.find_one({"username": username.lower()})
         if existing_user is not None:  # Explicitly check for None
-            return False, "Username already exists"
+            return False, "Username already exists. Please choose another one"
 
         # Check if email exists
         if user_data and 'email' in user_data:

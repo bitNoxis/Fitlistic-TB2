@@ -1,5 +1,7 @@
 import streamlit as st
 from PIL import Image
+
+from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 import plotly.graph_objects as go
 
@@ -8,6 +10,7 @@ import plotly.graph_objects as go
 def overview_page():
     # Page config
     st.set_page_config(page_title="Overview", page_icon="🏠", layout="centered")
+    inject_custom_styles()
 
     # Data points
     x = ["Point 1", "Point 2", "Point 3", "Point 4", "Point 5"]

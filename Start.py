@@ -1,5 +1,4 @@
 import streamlit as st
-from utils.hide_pages import hide_login_and_register
 
 # Configure the main page settings
 st.set_page_config(

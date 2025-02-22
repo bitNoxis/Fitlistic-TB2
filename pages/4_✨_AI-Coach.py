@@ -1,7 +1,9 @@
-# pages/5_✨_AICoach.py
+# pages/4_✨_AI-Coach.py
 import streamlit as st
 from openai import OpenAI
 from datetime import datetime
+
+from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 from utils.mongo_helper import get_collection
 from utils.holistic_planner import HolisticPlanGenerator  # Korrigierter Import
@@ -150,6 +152,7 @@ def main():
         page_icon="✨",
         layout="wide"
     )
+    inject_custom_styles()
 
     # Create tabs for chat and weekly plan
     tab1, tab2 = st.tabs(["💬 AI Coach Chat", "📅 Weekly Plan"])

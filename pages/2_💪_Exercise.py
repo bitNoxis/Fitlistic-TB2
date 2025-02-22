@@ -1,6 +1,8 @@
 import streamlit as st
 from PIL import Image
 import random
+
+from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 
 # Exercise pairs
@@ -24,6 +26,7 @@ QUOTATIONS = {
 def exercise_page():
     # Page config
     st.set_page_config(page_title="Exercise", page_icon="💪", layout="centered")
+    inject_custom_styles()
 
     # Initialize workout state if needed
     if 'workout_completed' not in st.session_state:

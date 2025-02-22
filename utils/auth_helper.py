@@ -18,7 +18,7 @@ def auth_required(func):
 
     return wrapper
 
-
+ 
 def init_auth():
     """Initialize authentication state"""
     if 'is_authenticated' not in st.session_state:
