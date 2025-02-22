@@ -1,6 +1,6 @@
+import re
 import streamlit as st
 from utils.mongo_helper import create_user
-import re
 
 # -----------------------------
 # PAGE CONFIG & CSS
@@ -15,20 +15,27 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-        /* Hide Streamlit's default sidebar & header elements */
+        /* Hide sidebar navigation */
         div[data-testid="stSidebarNav"] {display: none !important;}
+
+        /* Hide menu button */
         button[kind="header"] {display: none !important;}
+
+        /* Hide hamburger menu */
         .stApp > header {display: none !important;}
+
+        /* Hide Streamlit footer */
         footer {display: none !important;}
+
+        /* Hide all navigation elements */
         .stDeployButton {display: none !important;}
         section[data-testid="stSidebar"] {display: none !important;}
 
-        /* Make buttons bigger/wider */
-        .stButton > button {
-            width: 100%;
-            border-radius: 5px;
-            height: 2.5rem;
+        /* Hide full-screen button */
+        [data-testid="stElementToolbar"] {
+        display: none !important;
         }
+        
     </style>
     """,
     unsafe_allow_html=True
@@ -45,10 +52,17 @@ if 'form_data' not in st.session_state:
         'email': '',
         'password': '',
         'password_confirm': '',
-        'height': 170,
-        'weight': 70,
         'goals': []
     }
+
+    if 'fitness_goals' not in st.session_state:
+        st.session_state.fitness_goals = st.session_state.form_data['goals']
+
+    if 'height' not in st.session_state:
+        st.session_state.height = 170
+
+    if 'weight' not in st.session_state:
+        st.session_state.weight = 70
 
 if 'touched' not in st.session_state:
     st.session_state.touched = {}
@@ -161,8 +175,8 @@ if st.session_state.touched.get('password_confirm', False):
 # ROW 4: HEIGHT (LEFT), WEIGHT (RIGHT)
 # ------------------------------------------------
 r4c1, r4c2 = st.columns(2)
-height = r4c1.number_input("Height (cm)", min_value=100, max_value=250, value=form_data['height'])
-weight = r4c2.number_input("Weight (kg)", min_value=30, max_value=200, value=form_data['weight'])
+r4c1.number_input("Height (cm)", min_value=100, max_value=250, key="height")
+r4c2.number_input("Weight (kg)", min_value=30, max_value=200, key="weight")
 
 # ------------------------------------------------
 # Fitness Goals (single row)
@@ -170,7 +184,8 @@ weight = r4c2.number_input("Weight (kg)", min_value=30, max_value=200, value=for
 goals = st.multiselect(
     "Your Fitness Goals",
     ["Weight Loss", "Muscle Gain", "Flexibility", "Endurance", "General Fitness"],
-    default=form_data['goals']
+    default=st.session_state.fitness_goals,
+    key="fitness_goals"
 )
 
 # Update form_data after collecting inputs
@@ -181,9 +196,9 @@ form_data.update({
     'email': email,
     'password': password,
     'password_confirm': password_confirm,
-    'height': height,
-    'weight': weight,
-    'goals': goals
+    'height': st.session_state.height,
+    'weight': st.session_state.weight,
+    'goals': st.session_state.fitness_goals
 })
 
 # ------------------------------------------------
@@ -205,8 +220,8 @@ if st.button("Create Account", type="primary", use_container_width=True, disable
         "email": email,
         "first_name": first_name,
         "last_name": last_name,
-        "height": height,
-        "weight": weight,
+        "height": st.session_state.height,
+        "weight": st.session_state.weight,
         "fitness_goals": goals,
         "profile_completed": True
     }

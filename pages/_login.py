@@ -27,16 +27,15 @@ st.markdown("""
         /* Hide Streamlit footer */
         footer {display: none !important;}
 
-        /* Optional: Hide all navigation elements */
+        /* Hide all navigation elements */
         .stDeployButton {display: none !important;}
         section[data-testid="stSidebar"] {display: none !important;}
 
-        /* Keep the rest of the theme styling */
-        .stButton > button {
-            width: 100%;
-            border-radius: 5px;
-            height: 2.5rem;
+        /* Hide full-screen button */
+        [data-testid="stElementToolbar"] {
+        display: none !important;
         }
+       
     </style>
 """, unsafe_allow_html=True)
 
