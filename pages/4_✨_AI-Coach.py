@@ -6,7 +6,7 @@ from datetime import datetime
 from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 from utils.mongo_helper import get_collection
-from utils.holistic_planner import HolisticPlanGenerator  # Korrigierter Import
+from utils.holistic_planner import HolisticPlanGenerator
 
 
 def load_api_key():
@@ -40,7 +40,9 @@ def get_weekly_plan_tab():
         "exercises": get_collection("fitlistic", "exercises"),
         "breathwork": get_collection("fitlistic", "breathwork_techniques"),
         "meditation": get_collection("fitlistic", "meditation_templates"),
-        "stretching": get_collection("fitlistic", "stretching_routines")
+        "stretching": get_collection("fitlistic", "stretching_routines"),
+        "cool_downs": get_collection("fitlistic", "cool_downs"),
+        "warm_ups": get_collection("fitlistic", "warm_ups")
     }
 
     # Überprüfe, ob alle Collections erfolgreich initialisiert wurden
@@ -101,7 +103,6 @@ def get_weekly_plan_tab():
 
 
 def get_initial_message():
-    """Create personalized initial message based on user data"""
     user = st.session_state.user
     goals_str = ", ".join(user.get("fitness_goals", ["General Fitness"]))
     bmi = calculate_bmi(user.get("weight", 70), user.get("height", 170))
@@ -116,13 +117,11 @@ How would you like to work towards your goals today?"""
 
 
 def calculate_bmi(weight, height):
-    """Calculate BMI from weight (kg) and height (cm)"""
     height_m = height / 100  # convert cm to m
     return weight / (height_m * height_m)
 
 
 def display_day_schedule(schedule, day_name):
-    """Display a single day's schedule"""
     st.subheader(f"{day_name} - {schedule['type']}")
 
     for block in schedule['schedule']:
@@ -141,7 +140,6 @@ def display_day_schedule(schedule, day_name):
 
 
 def format_time(time_str):
-    """Format time string for display"""
     return datetime.strptime(time_str, '%H:%M').strftime('%I:%M %p')
 
 
