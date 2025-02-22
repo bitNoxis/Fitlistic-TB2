@@ -1,15 +1,14 @@
-import streamlit as st
+from datetime import datetime, timezone, timedelta
+
 import plotly.graph_objects as go
+import streamlit as st
 from PIL import Image
 from bson import ObjectId
-from datetime import datetime, timezone
+from streamlit_star_rating import st_star_rating
 
 from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 from utils.mongo_helper import get_collection, get_latest_wellbeing_score
-
-# Import star rating component with emoticons support
-from streamlit_star_rating import st_star_rating
 
 
 @auth_required
@@ -38,19 +37,27 @@ def overview_page():
     if len(wellbeing_docs) >= 5:
         dates = [doc["date"].strftime("%b %d") for doc in wellbeing_docs]
         scores = [doc.get("score", 0) for doc in wellbeing_docs]
+        notes = [doc.get("notes", "No note") for doc in wellbeing_docs]
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=dates,
             y=scores,
             mode='lines+markers',
-            line=dict(color='#1E90FF', width=3, shape="spline"),
-            marker=dict(size=10, color='#55b82e', line=dict(width=2, color='white'))
+            line=dict(color='#1E90FF', width=3, shape="spline"),  # Spline for smooth curves
+            marker=dict(size=10, color='#55b82e', line=dict(width=2, color='white')),
+            customdata=[doc.get("notes", "No note") for doc in wellbeing_docs],
+            hovertemplate="<b>Score: %{y}</b><br>Note: %{customdata}<extra></extra>"
         ))
         fig.update_layout(
             title="Well-Being Score Over Time",
             xaxis_title="Date",
             yaxis_title="Score (1-5)",
+            yaxis=dict(
+                range=[1, 5],
+                tickmode="array",
+                tickvals=[1, 2, 3, 4, 5]
+            ),
             plot_bgcolor="white",
             paper_bgcolor="white",
             font=dict(color="#333"),
@@ -71,29 +78,43 @@ def overview_page():
     except Exception as e:
         st.error(f"Error retrieving well-being score: {e}")
 
-    try:
-        score_img = Image.open("images/Score.png")
-        st.image(score_img, width=335)
-    except Exception:
-        st.warning("Score image not found")
-
-    # ------------------- Mood Logging Section using Star Rating -------------------
     st.header("Log Your Mood")
-    with st.expander("Click here to log your current mood", expanded=False):
-        mood_rating = st_star_rating(
-            label="How do you feel today?",
-            maxValue=5,
-            defaultValue=3,
-            key="rating",
-            emoticons=True  # Use emojis for the rating
-        )
-        mood_notes = st.text_area("Any additional comments?", value="")
-        if st.button("Submit Mood"):
-            try:
-                collection = get_collection("fitlistic", "wellbeing_scores")
-                if collection is None:
-                    st.error("Database connection failed.")
-                else:
+
+    collection = get_collection("fitlistic", "wellbeing_scores")
+    if collection is None:
+        st.error("Database connection failed.")
+        return
+
+    # Define today's range in UTC
+    now_utc = datetime.now(timezone.utc)
+    today_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start = today_start + timedelta(days=1)
+
+    # Query for an entry in the current day
+    found = collection.find_one({
+        "user_id": ObjectId(user["_id"]),
+        "date": {
+            "$gte": today_start,
+            "$lt": tomorrow_start
+        }
+    })
+
+    if found:
+        # User has already logged a mood for today
+        st.info("You have already logged your mood for today!")
+    else:
+        # Show the mood logging expander
+        with st.expander("Click here to log your current mood", expanded=False):
+            mood_rating = st_star_rating(
+                label="How do you feel today?",
+                maxValue=5,
+                defaultValue=3,
+                key="rating",
+                emoticons=True
+            )
+            mood_notes = st.text_area("Any additional comments?", value="")
+            if st.button("Submit Mood"):
+                try:
                     mood_doc = {
                         "user_id": ObjectId(user["_id"]),
                         "date": datetime.now(timezone.utc),
@@ -102,8 +123,8 @@ def overview_page():
                     }
                     collection.insert_one(mood_doc)
                     st.success("Your mood has been logged successfully!")
-            except Exception as e:
-                st.error(f"Error logging mood: {e}")
+                except Exception as e:
+                    st.error(f"Error logging mood: {e}")
 
     # ------------------- Quick Start Section -------------------
     st.header("Quick Start")
@@ -119,20 +140,34 @@ def overview_page():
         if st.button("Lower Body", type="primary", key="lowerbody"):
             st.switch_page("pages/2_💪_Exercise.py")
 
-    # ------------------- Weekly Progress Section -------------------
-    st.header("Weekly Progress")
-    progress_data = {
-        'Workouts Completed': 3,
-        'Total Minutes': 45,
-        'Calories Burned': 450
-    }
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Workouts", progress_data['Workouts Completed'])
-    with col2:
-        st.metric("Minutes", progress_data['Total Minutes'])
-    with col3:
-        st.metric("Calories", progress_data['Calories Burned'])
+        # ------------------- Weekly Progress Section (Workout Stats) -------------------
+        st.header("Weekly Progress")
+        try:
+            workout_collection = get_collection("fitlistic", "workout_logs")
+            now = datetime.now(timezone.utc)
+            seven_days_ago = now - timedelta(days=7)
+            # Fetch all workout logs for the user in the last 7 days
+            logs = list(workout_collection.find({
+                "user_id": ObjectId(user["_id"]),
+                "date": {"$gte": seven_days_ago}
+            }))
+            workouts_completed = len(logs)
+            total_minutes = sum(log.get("total_duration_minutes", 0) for log in logs)
+            total_calories = sum(log.get("total_calories_burned", 0) for log in logs)
+        except Exception as e:
+            st.error(f"Error fetching workout logs: {e}")
+            workouts_completed = total_minutes = total_calories = 0
+
+        if workouts_completed > 0:
+            col1, col2, col3 = st.columns(2)
+            with col1:
+                st.metric("Workouts", workouts_completed)
+            with col2:
+                st.metric("Minutes", total_minutes)
+            with col3:
+                st.metric("Calories", total_calories)
+        else:
+            st.info("No workouts logged in the last 7 days. Get started by logging your first workout!")
 
 
 # Run the page
