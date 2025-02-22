@@ -183,7 +183,7 @@ r4c2.number_input("Weight (kg)", min_value=30, max_value=200, key="weight")
 # ------------------------------------------------
 goals = st.multiselect(
     "Your Fitness Goals",
-    ["Flexibility", "Better Mental Health", "Stress Resilience", "General Fitness" "Weight Loss", "Muscle Gain"],
+    ["Flexibility", "Better Mental Health", "Stress Resilience", "General Fitness", "Weight Loss", "Muscle Gain"],
     key="fitness_goals"
 )
 
