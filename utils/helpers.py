@@ -1,14 +1,4 @@
 """Helper functions and constants for the Fitlistic app"""
-
-# Exercise pairs
-EXERCISE_PAIRS = [
-    ("images/Squat.png", "15x3 Squat"),
-    ("images/Dips.png", "10x4 Dips"),
-    ("images/Meditate.png", "3 Minute Breathwork"),
-    ("images/Plank.png", "30 Seconds Plank"),
-    ("images/Stretch.png", "1 Minute Stretch")
-]
-
 # Motivational quotes
 QUOTATIONS = {
     1: "Exercises is king and nutrition is queen. Combine the two and you will have a kingdom.",

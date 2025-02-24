@@ -51,7 +51,7 @@ with colB:
     except:
         st.title("Fitlistic")
 
-    st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Welcome Back to Fitlistic!</h1>",
+    st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Welcome Back</h1>",
                 unsafe_allow_html=True)
 
 # Add some spacing
