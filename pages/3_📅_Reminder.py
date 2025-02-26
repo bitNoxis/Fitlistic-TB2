@@ -30,16 +30,10 @@ def reminder_page():
     with col2:
         selected_time = st.time_input("Select time")
 
-    workout_type = st.selectbox(
-        "Workout Type",
-        ["Fullbody Workout", "Upperbody Workout", "Power Recovery", "Lower Body"]
-    )
-
     if st.button("Set Reminder", type="primary"):
         reminder = {
             'date': selected_date,
             'time': selected_time,
-            'workout': workout_type
         }
         st.session_state.reminders.append(reminder)
         st.success("Reminder set successfully!")
@@ -53,7 +47,7 @@ def reminder_page():
                     f"Reminder for {reminder['date'].strftime('%B %d, %Y')} "
                     f"at {reminder['time'].strftime('%I:%M %p')}"
             ):
-                st.write(f"Workout: {reminder['workout']}")
+
                 if st.button("Delete Reminder", key=f"del_{idx}"):
                     st.session_state.reminders.pop(idx)
                     st.rerun()

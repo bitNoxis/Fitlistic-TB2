@@ -171,7 +171,7 @@ def exercise_page():
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("✅ Mark as Complete", type="primary", use_container_width=True):
+        if st.button("Mark as Complete", type="primary", use_container_width=True):
             success, message = save_workout_log(
                 user_id,
                 current_workout.get('workout_refs', []),
