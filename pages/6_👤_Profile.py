@@ -23,8 +23,7 @@ def profile_page():
     user = st.session_state.user
     user_id = user.get("_id")
 
-    # Page header
-    st.title("Your Profile")
+    st.title("👤 Edit your Profile")
 
     # Logout button below title but above tabs
     if st.button("Log Out", type="primary"):
@@ -216,7 +215,7 @@ def handle_sidebar_buttons():
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.success("You have been logged out successfully.")
-    if st.button("New Account"):
+    if st.button("Create New Account"):
         st.switch_page("pages/_Register.py")
 
 

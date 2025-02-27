@@ -1,6 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import streamlit as st
+import pandas as pd
 
 from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
@@ -8,43 +9,79 @@ from utils.holistic_planner import generate_weekly_plan
 from utils.mongo_helper import get_collection, save_workout_plan
 
 
+def get_date_range(start_date, days=7):
+    """Generate a list of dates starting from the given date"""
+    return [(start_date + timedelta(days=i)) for i in range(days)]
+
+
+def format_date_for_display(date):
+    """Format a date for display in the UI"""
+    return date.strftime("%a, %b %d")
+
+
+def format_date_for_db(date):
+    """Format a date for storage in the database"""
+    return date.strftime("%Y-%m-%d")
+
+
 def get_weekly_plan_tab():
     st.title("📋 Workout Creator")
     st.header("Generate your 7-Day Holistic Fitness Plan")
+
+    # Get today's date
+    today = datetime.now().date()
+
+    # Date selection for plan start
+    st.subheader("Select your plan start date")
+    start_date = st.date_input(
+        "When would you like to start your plan?",
+        value=today,
+        min_value=today,
+        max_value=today + timedelta(days=30),
+        key="plan_start_date",
+        help="Your plan will begin on this date and continue for 7 days"
+    )
+
+    # Create date range for the plan
+    date_range = get_date_range(start_date, days=7)
+    formatted_dates = [format_date_for_display(date) for date in date_range]
+    formatted_db_dates = [format_date_for_db(date) for date in date_range]
 
     col1, col2 = st.columns(2)
 
     with col1:
         # Experience Level Selector with multiselect
         experience_level = st.multiselect(
-            "Select your experience level",
-            options=["beginner", "intermediate", "advanced"],
-            default=["beginner"],
+            "Select your experience level(s)",
+            options=["Beginner", "Intermediate", "Advanced"],
+            default=["Beginner"],
             key="experience_selector",
             help="This will adjust the intensity and complexity of your workouts"
         )
-        # Use the first selected experience level
-        selected_level = experience_level[0] if experience_level else "beginner"
+        # Use the first selected experience level, converting to lowercase for backend processing
+        selected_level = experience_level[0].lower() if experience_level else "beginner"
 
     with col2:
-        # Rest day selector with multiselect
-        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        preferred_rest_day = st.multiselect(
+        # Rest day selector with single select dropdown
+        day_options = [f"Day {i + 1} ({formatted_dates[i]})" for i in range(7)]
+        selected_rest_day_index = st.selectbox(
             "Choose your preferred rest day",
-            options=days,
-            default=["Sunday"],
+            options=range(len(day_options)),
+            format_func=lambda i: day_options[i],
+            index=6,  # Default to Day 7
             key="rest_day_selector",
             help="Select the day that best fits your schedule for rest and recovery"
         )
-        # Use the first selected rest day
-        selected_rest_day = preferred_rest_day[0] if preferred_rest_day else "Sunday"
+        # Convert to the date string format for storage
+        selected_rest_day = formatted_db_dates[selected_rest_day_index]
 
-    # Workout duration selection
+    # Workout duration selection with options
     workout_duration = st.selectbox(
-        "Main workout duration (minutes)",
-        options=[30, 45, 60, 90],
+        "Main duration per Day (minutes)",
+        options=[15, 30, 45, 60],
+        index=1,  # Default to 30 minutes
         key="workout_duration",
-        help="Total time for your main exercises"
+        help="Total daily time for your main exercises"
     )
 
     # Initialize required collections
@@ -62,8 +99,8 @@ def get_weekly_plan_tab():
         st.error("Failed to connect to one or more required collections")
         return
 
-    # Generate the weekly plan
-    if 'weekly_plan' not in st.session_state or st.button("Generate New Plan 🔄"):
+    # Generate button - only generate when clicked, don't auto-generate
+    if st.button("Generate New Plan 🔄"):
         with st.spinner("Creating your personalized weekly plan..."):
             try:
                 user_fitness_goals = st.session_state.user.get('fitness_goals', [])
@@ -75,8 +112,10 @@ def get_weekly_plan_tab():
                     'height': st.session_state.user.get('height', 170),
                     'fitness_goals': user_fitness_goals,
                     'experience_level': selected_level,
-                    'preferred_rest_day': selected_rest_day.lower(),
-                    'workout_duration': workout_duration
+                    'preferred_rest_day': selected_rest_day,
+                    'workout_duration': workout_duration,
+                    'start_date': start_date.isoformat(),
+                    'date_range': formatted_db_dates
                 }
 
                 st.session_state.weekly_plan = generate_weekly_plan(user_data, collections)
@@ -85,6 +124,7 @@ def get_weekly_plan_tab():
                 st.error(f"Error generating plan: {str(e)}")
                 return
 
+    # Display the plan only if it exists in session state
     if 'weekly_plan' in st.session_state:
         display_weekly_plan(st.session_state.weekly_plan)
 
@@ -100,8 +140,7 @@ def get_weekly_plan_tab():
 
                 if success:
                     st.success("Workout plan saved successfully!")
-                    if st.button("Start Workout"):
-                        st.switch_page("pages/2_💪_Exercise.py?new_plan=true")
+                    st.success("You can look at the plan at the Exercise page")
                 else:
                     st.error(f"Failed to save plan: {message}")
 
@@ -109,34 +148,57 @@ def get_weekly_plan_tab():
 def display_weekly_plan(plan):
     # Display summary metrics
     col1, col2, col3 = st.columns(3)
+
+    # Count total exercises across all days
+    total_exercises = 0
+    for day in plan['schedule'].values():
+        for block in day['schedule']:
+            # Count main exercises
+            if block.get('activity', {}).get('type') == 'exercise':
+                total_exercises += 1
+            # Count exercises in phases (warm-ups, cool-downs)
+            if 'phases' in block.get('activity', {}):
+                for phase in block['activity']['phases']:
+                    total_exercises += len(phase.get('exercises', []))
+            # Count stretching sequence
+            if 'sequence' in block.get('activity', {}):
+                total_exercises += len(block['activity'].get('sequence', []))
+
     with col1:
-        total_workouts = sum(1 for day in plan['schedule'].values()
-                             if day['type'] != 'Rest & Rejuvenation')
-        st.metric("Weekly Workouts", total_workouts)
+        st.metric("Total Exercises", total_exercises)
+
     with col2:
         total_minutes = sum(
             sum(block['duration'] for block in day['schedule'])
             for day in plan['schedule'].values()
         )
         st.metric("Total Minutes", total_minutes)
+
     with col3:
         active_days = len([day for day in plan['schedule'].values()
-                           if day['type'] != 'Rest & Rejuvenation'])
+                           if day['type'] != 'Rest Day'])
         st.metric("Active Days", active_days)
 
-    # Create tabs for each day of the week
-    days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    tabs = st.tabs(days)
+    # Create tabs for each day of the plan
+    days = list(plan['schedule'].keys())
+    day_labels = [f"Day {i + 1}" for i in range(len(days))]
 
-    for day, tab in zip(days, tabs):
+    tabs = st.tabs(day_labels)
+
+    for i, (day, tab) in enumerate(zip(days, tabs)):
         with tab:
-            day_lower = day.lower()
-            if day_lower in plan['schedule']:
-                day_schedule = plan['schedule'][day_lower]
-                if day_schedule['type'] == 'Rest & Rejuvenation':
+            # Display the date within the tab
+            if 'metadata' in plan and 'start_date' in plan['metadata']:
+                date = get_date_range(datetime.fromisoformat(plan['metadata']['start_date']).date(), len(days))[i]
+                formatted_date = format_date_for_display(date)
+                st.subheader(f"Day {i + 1}: {formatted_date}")
+
+            if day in plan['schedule']:
+                day_schedule = plan['schedule'][day]
+                if day_schedule['type'] == 'Rest Day':
                     display_rest_day_message()
                 else:
-                    display_day_schedule(day_schedule, day)
+                    display_day_schedule(day_schedule, f"Day {i + 1}")
 
 
 def display_rest_day_message():
@@ -152,7 +214,8 @@ def display_rest_day_message():
 
 
 def display_day_schedule(schedule, day_name):
-    st.subheader(f"{day_name} - {schedule.get('type', 'No type')}")
+    """Display the workout schedule for a specific day."""
+    # Remove the workout type display completely
 
     for block in schedule.get('schedule', []):
         activity = block.get("activity", {})
@@ -165,14 +228,54 @@ def display_day_schedule(schedule, day_name):
 
         expander_title = f"{activity_name} ({duration} min)"
         with st.expander(expander_title):
+            activity_type = activity.get("type", "")
+
+            # Show equipment and target heart rate for warm-ups and cool-downs
+            if activity_type in ["warm_up", "cool_down"]:
+                equipment = activity.get("equipment_needed", "None")
+                if isinstance(equipment, list) and equipment:
+                    st.markdown(f"**Equipment needed:** {', '.join(equipment)}")
+                elif isinstance(equipment, str) and equipment:
+                    st.markdown(f"**Equipment needed:** {equipment}")
+
+                target_hr = activity.get("target_heart_rate", "")
+                if target_hr:
+                    st.markdown(f"**Target heart rate:** {target_hr}")
+
+            # Display phases for warm-ups and cool-downs
+            phases = activity.get("phases", [])
+            if phases and isinstance(phases, list):
+                for phase in phases:
+                    if isinstance(phase, dict):
+                        st.markdown(f"### {phase.get('name', 'Unnamed Phase')}")
+
+                        # Display exercises in this phase
+                        phase_exercises = phase.get("exercises", [])
+                        if phase_exercises and isinstance(phase_exercises, list):
+                            for ex in phase_exercises:
+                                if isinstance(ex, dict):
+                                    st.markdown(f"**{ex.get('name', 'Unnamed Exercise')}**")
+
+                                    # Display reps if available
+                                    reps = ex.get('reps', '')
+                                    if reps:
+                                        st.markdown(f"Reps: {reps}")
+
+                                    # Display exercise instructions
+                                    ex_instructions = ex.get('instructions', [])
+                                    if ex_instructions:
+                                        st.markdown("Instructions:")
+                                        for instruction in ex_instructions:
+                                            st.markdown(f"- {instruction}")
+
+                                    st.markdown("---")
+
             # Handle stretching routines with sequences
             sequence = activity.get("sequence", [])
             if sequence and isinstance(sequence, list):
                 for exercise in sequence:
                     if isinstance(exercise, dict):
                         st.markdown(f"**{exercise.get('name', 'Unnamed Exercise')}**")
-                        if 'duration' in exercise:
-                            st.markdown(f"Duration: {exercise['duration']}")
                         if 'reps' in exercise:
                             st.markdown(f"Reps: {exercise['reps']}")
 
@@ -182,42 +285,37 @@ def display_day_schedule(schedule, day_name):
                             for instruction in instructions:
                                 st.markdown(f"- {instruction}")
 
-                        target_muscles = exercise.get('target_muscles', [])
-                        if target_muscles:
-                            st.markdown(f"Target muscles: {', '.join(target_muscles)}")
                         st.markdown("---")
 
             # Handle breathwork with steps
             steps = activity.get("steps", [])
-            if steps and isinstance(steps, (list, str)):
+            # Only display steps if they are strings, not dictionaries
+            if steps and isinstance(steps, list) and all(isinstance(step, str) for step in steps):
                 st.markdown("**Steps:**")
-                if isinstance(steps, list):
-                    for step in steps:
-                        st.markdown(f"- {step}")
-                else:
-                    for step in steps.split('\n'):
-                        st.markdown(f"- {step}")
+                for step in steps:
+                    st.markdown(f"- {step}")
+            elif steps and isinstance(steps, str):
+                st.markdown("**Steps:**")
+                for step in steps.split('\n'):
+                    st.markdown(f"- {step}")
 
-            # Handle meditation with steps
+            # Handle meditation with steps - display in nicely formatted way only
             meditation_steps = activity.get("steps", [])
-            if meditation_steps and isinstance(meditation_steps, list):
+            if meditation_steps and isinstance(meditation_steps, list) and all(
+                    isinstance(step, dict) for step in meditation_steps):
                 for step in meditation_steps:
-                    if isinstance(step, dict):
-                        st.markdown(f"**Phase: {step.get('phase', 'Unknown phase')}**")
-                        duration = step.get('duration_minutes')
-                        if duration:
-                            st.markdown(f"Duration: {duration} minutes")
+                    st.markdown(f"**Phase: {step.get('phase', 'Unknown phase')}**")
 
-                        instructions = step.get('instructions', [])
-                        if instructions:
-                            st.markdown("Instructions:")
-                            for instruction in instructions:
-                                st.markdown(f"- {instruction}")
-                        st.markdown("---")
+                    instructions = step.get('instructions', [])
+                    if instructions:
+                        st.markdown("Instructions:")
+                        for instruction in instructions:
+                            st.markdown(f"- {instruction}")
+                    st.markdown("---")
 
             # Handle regular exercises
             exercises = activity.get("exercises", [])
-            if exercises and isinstance(exercises, list):
+            if exercises and isinstance(exercises, list) and activity_type == "exercise":
                 for ex in exercises:
                     if isinstance(ex, dict):
                         st.markdown(f"**{ex.get('name', 'Unnamed Exercise')}**")
@@ -246,10 +344,11 @@ def display_day_schedule(schedule, day_name):
                 for benefit in benefits:
                     st.markdown(f"- {benefit}")
 
-            # Show target areas if available
-            target_areas = activity.get("target_areas", [])
-            if target_areas and isinstance(target_areas, list):
-                st.markdown(f"\n**Target Areas:** {', '.join(target_areas)}")
+            # Hide target areas for stretching routines but keep for other activities
+            if activity_type != "stretching":
+                target_areas = activity.get("target_areas", [])
+                if target_areas and isinstance(target_areas, list):
+                    st.markdown(f"\n**Target Areas:** {', '.join(target_areas)}")
 
 
 def format_time(time_str):
@@ -258,7 +357,7 @@ def format_time(time_str):
 
 @auth_required
 def main():
-    st.set_page_config(page_title="AI Wellbeing Coach", page_icon="✨", layout="centered")
+    st.set_page_config(page_title="Workout Creator", page_icon="📋", layout="centered")
     inject_custom_styles()
 
     get_weekly_plan_tab()

@@ -15,7 +15,7 @@ def reminder_page():
     if 'reminders' not in st.session_state:
         st.session_state.reminders = []
 
-    st.title("Workout Reminders")
+    st.title("📅 Workout Reminders")
 
     # Add new reminder
     st.header("Set New Reminder")

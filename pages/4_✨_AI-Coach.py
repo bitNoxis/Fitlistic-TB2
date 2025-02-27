@@ -49,7 +49,7 @@ def main():
     st.set_page_config(page_title="AI Wellbeing Coach", page_icon="✨", layout="centered")
     inject_custom_styles()
 
-    st.title(f"AI Coach️")
+    st.title(f"✨ AI Wellbeing Coach️")
     initialize_chat_history()
     with st.sidebar:
         st.header(f"Ideas for one time workouts (based on your goals)")
@@ -63,23 +63,40 @@ def main():
 
 def handle_sidebar_buttons():
     goals = st.session_state.user.get('fitness_goals', [])
+
     if "Weight Loss" in goals:
         if st.button("🏃‍♂️ Fat Burning Workout"):
             handle_workout_click("Create a one time fat burning HIIT workout suitable for my fitness level")
+
     if "Muscle Gain" in goals:
         if st.button("💪 Strength Training"):
             handle_workout_click("Create a one time strength training workout focused on muscle gain")
+
     if "Flexibility" in goals:
-        if st.button("🧘‍♀️ Flexibility"):
+        if st.button("🧘‍♀️ Flexibility Routine"):
             handle_workout_click("Create a one time flexibility and mobility routine")
-    if "Endurance" in goals:
-        if st.button("🏃 Endurance Training"):
-            handle_workout_click("Create a one time  endurance-focused workout")
+
+    if "Better Mental Health" in goals:
+        if st.button("🧠 Mental Health Boost"):
+            handle_workout_click(
+                "Create a one time workout that incorporates mindfulness and gentle exercises for better mental health")
+
+    if "Stress Resilience" in goals:
+        if st.button("😌 Stress Resilience"):
+            handle_workout_click(
+                "Create a one time workout that combines light cardio with stress management techniques")
+
+    if "General Fitness" in goals:
+        if st.button("🏋️‍♂️ Full Body Workout"):
+            handle_workout_click("Create a one time full body workout for general fitness")
+
+    # Fallback options if no specific goals are selected
     if not goals:
         if st.button("🏃‍♂️ Cardio Workout"):
             handle_workout_click("Create a one time 30-minute cardio workout for beginners")
         if st.button("💪 Full Body Workout"):
-            handle_workout_click("Create a one time  full-body workout for general fitness")
+            handle_workout_click("Create a one time full body workout for general fitness")
+
     if st.button("🗑️ Clear Chat"):
         st.session_state.messages = [{"role": "assistant", "content": get_initial_message()}]
         st.rerun()

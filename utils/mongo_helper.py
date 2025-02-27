@@ -231,267 +231,155 @@ def save_user_plan(user_id: str, plan_data: dict):
         return False, str(e)
 
 
-def get_active_plan(user_id: str):
-    """Get user's active workout plan"""
-    collection = get_collection("fitlistic", "user_plans")
-    if collection is None:
-        return None
-
+def save_workout_plan(user_id, plan_data):
+    """Save a workout plan to the database and mark it as active."""
     try:
-        return collection.find_one({
-            "user_id": user_id,
-            "is_active": True
-        })
-    except Exception:
-        return None
-
-
-def save_workout_plan(user_id: str, plan_data: dict) -> tuple[bool, str]:
-    """
-    Save a workout plan with exercise references to MongoDB.
-    Overwrites any existing active plan and clears old workout logs.
-
-    Args:
-        user_id: User's ID string
-        plan_data: Dictionary containing workout plan from AI Coach
-
-    Returns:
-        Tuple of (success: bool, message: str)
-    """
-    try:
-        # Ensure user_id is converted to ObjectId
-        from bson.objectid import ObjectId
-        from datetime import datetime, timezone
-
-        user_obj_id = ObjectId(user_id)
-
         collection = get_collection("fitlistic", "user_workout_plans")
         if collection is None:
-            return False, "Database connection failed"
+            return False, "Could not connect to database"
 
-        # Deactivate any currently active plans
+        # Format the plan for MongoDB
+        plan_document = {
+            "user_id": ObjectId(user_id),
+            "created_at": datetime.now(timezone.utc),
+            "schedule": plan_data["schedule"],
+            "is_active": True,
+            "metadata": plan_data["metadata"]
+        }
+
+        # Deactivate all existing workout plans for this user
         collection.update_many(
-            {"user_id": user_obj_id},
+            {"user_id": ObjectId(user_id)},
             {"$set": {"is_active": False}}
         )
 
-        # Clear workout logs that might be referencing a previous plan
-        logs_collection = get_collection("fitlistic", "workout_logs")
-        if logs_collection is not None:  # Use explicit comparison with None
-            # Get current week's start
-            from datetime import datetime, timezone, timedelta
-            now = datetime.now(timezone.utc)
-            days_since_monday = now.weekday()
-            week_start = (now - timedelta(days=days_since_monday)).replace(
-                hour=0, minute=0, second=0, microsecond=0)
-
-            # Remove logs from current week
-            logs_collection.delete_many({
-                "user_id": user_obj_id,
-                "date": {"$gte": week_start}
-            })
-
-        # Convert schedule to reference format
-        reference_schedule = {}
-
-        for day, day_data in plan_data['schedule'].items():
-            reference_schedule[day] = {
-                'type': day_data['type'],
-                'workout_refs': []
-            }
-
-            # Process each activity in the day's schedule
-            for activity in day_data.get('schedule', []):
-                activity_data = activity.get('activity', {})
-                duration = activity.get('duration', 0)
-
-                # Create workout reference with type detection
-                workout_ref = {
-                    'duration': duration
-                }
-
-                # Determine activity type
-                def determine_activity_type(activity_data):
-                    if 'type' in activity_data:
-                        activity_type = activity_data['type'].lower()
-                        if 'breathwork' in activity_type:
-                            return 'breathwork'
-                        elif 'warm' in activity_type or 'warm_up' in activity_type:
-                            return 'warm_up'
-                        elif 'cool' in activity_type or 'cool_down' in activity_type:
-                            return 'cool_down'
-                        elif 'stretch' in activity_type:
-                            return 'stretching'
-                        elif 'meditation' in activity_type:
-                            return 'meditation'
-                        elif 'exercise' in activity_type:
-                            return 'exercise'
-
-                    name = activity_data.get('name', '').lower()
-                    if 'breath' in name:
-                        return 'breathwork'
-                    elif 'warm' in name:
-                        return 'warm_up'
-                    elif 'cool' in name:
-                        return 'cool_down'
-                    elif 'stretch' in name:
-                        return 'stretching'
-                    elif 'meditation' in name:
-                        return 'meditation'
-
-                    if 'sequence' in activity_data:
-                        if 'warm' in name:
-                            return 'warm_up'
-                        elif 'cool' in name:
-                            return 'cool_down'
-                        else:
-                            return 'stretching'
-                    elif 'steps' in activity_data:
-                        if 'meditation' in name:
-                            return 'meditation'
-                        elif 'breath' in name:
-                            return 'breathwork'
-                        else:
-                            return 'breathwork'
-                    elif 'form_cues' in activity_data:
-                        return 'exercise'
-
-                    return 'unknown'
-
-                try:
-                    activity_id = activity_data.get('_id')
-
-                    if activity_id:
-                        workout_ref['reference_id'] = ObjectId(str(activity_id))
-
-                    # Set the activity type ONCE and don't override it
-                    workout_ref['activity_type'] = determine_activity_type(activity_data)
-
-                    # Only add to workout_refs if we have both type and ID
-                    if 'reference_id' in workout_ref and 'activity_type' in workout_ref:
-                        reference_schedule[day]['workout_refs'].append(workout_ref)
-
-                except Exception as id_error:
-                    print(f"Error processing activity ID: {id_error}")
-                    print("Problematic activity data:", activity_data)
-
-        # Create the plan document
-        plan_document = {
-            "user_id": user_obj_id,
-            "created_at": datetime.now(timezone.utc),
-            "schedule": reference_schedule,
-            "is_active": True,
-            # Include metadata from original plan
-            "metadata": plan_data.get('metadata', {})
-        }
-
+        # Insert the new workout plan
         result = collection.insert_one(plan_document)
-        if result.inserted_id:
-            return True, "Plan saved successfully"
-        return False, "Failed to save plan"
 
+        return True, str(result.inserted_id)
     except Exception as e:
-        import traceback
-        print(f"Error saving plan: {e}")
-        print(traceback.format_exc())
-        return False, f"Error saving plan: {str(e)}"
+        return False, str(e)
 
 
-def estimate_calories_burned(exercise_type, duration_minutes, user_weight):
-    met_values = {
-        'warm_up': 3.0,
-        'cool_down': 2.5,
-        'exercise': 5.0,
-        'breathwork': 2.0,
-        'meditation': 1.5,
-        'stretching': 2.5,
-        'unknown': 3.0
-    }
-
-    duration_hours = duration_minutes / 60
-    weight_kg = user_weight if user_weight else 70
-    met = met_values.get(exercise_type, 3.0)
-    calories = met * weight_kg * duration_hours
-
-    return round(calories)
-
-
-def save_workout_log(user_id, workout_refs, workout_type, notes=""):
+def get_active_workout_plan(user_id):
+    """Retrieve the user's active workout plan."""
     try:
-        from bson.objectid import ObjectId
-        from datetime import datetime, timezone
-
-        user_obj_id = ObjectId(user_id)
-        collection = get_collection("fitlistic", "workout_logs")
-
+        collection = get_collection("fitlistic", "user_workout_plans")
         if collection is None:
-            return False, "Database connection failed"
+            return None
 
-        total_duration = sum(ref['duration'] for ref in workout_refs)
+        # Find the active workout plan for this user
+        plan = collection.find_one({
+            "user_id": ObjectId(user_id),
+            "is_active": True
+        })
 
-        users_collection = get_collection("fitlistic", "users")
-        user = users_collection.find_one({"_id": user_obj_id})
-        user_weight = user.get('weight', 70) if user else 70
+        return plan
+    except Exception as e:
+        st.error(f"Error retrieving workout plan: {str(e)}")
+        return None
 
-        total_calories = sum(
-            estimate_calories_burned(ref['activity_type'], ref['duration'], user_weight)
-            for ref in workout_refs
-        )
 
-        activities = []
-        collection_mapping = {
-            'warm_up': 'warm_ups',
-            'cool_down': 'cool_downs',
-            'exercise': 'exercises',
-            'breathwork': 'breathwork_techniques',
-            'meditation': 'meditation_templates',
-            'stretching': 'stretching_routines'
-        }
+def save_workout_log(user_id, workout_date, workout_activities, workout_type, notes=""):
+    """Save a completed workout to the workout_logs collection."""
+    try:
+        collection = get_collection("fitlistic", "workout_logs")
+        if collection is None:
+            return False, "Could not connect to database"
 
-        for ref in workout_refs:
-            collection_name = collection_mapping.get(ref['activity_type'], 'exercises')
-
-            # Get exercise name from the exercise_details if available
-            exercise_name = "Exercise"
-            if 'exercise_details' in ref and 'name' in ref['exercise_details']:
-                exercise_name = ref['exercise_details']['name']
-
-            activities.append({
-                "collection_name": collection_name,
-                "exercise_id": ref['reference_id'],
-                "duration_minutes": ref['duration'],
-                "notes": exercise_name
-            })
-
-        log_document = {
-            "user_id": user_obj_id,
-            "date": datetime.now(timezone.utc),
-            "total_duration_minutes": total_duration,
-            "total_calories_burned": total_calories,
-            "workout_notes": f"Completed {workout_type} workout",
-            "activities": activities
-        }
-
-        if notes:
-            log_document["workout_notes"] += f": {notes}"
-
-        result = collection.insert_one(log_document)
-
-        if result.inserted_id:
-            users_collection.update_one(
-                {"_id": user_obj_id},
-                {"$inc": {"total_workouts": 1}}
-            )
-
+        # Handle both old format (empty workout_refs) and new format (schedule)
+        if not workout_activities or (isinstance(workout_activities, list) and len(workout_activities) == 0):
+            # Simple log with minimal information for old format
+            workout_date_obj = datetime.strptime(workout_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            log_document = {
+                "user_id": ObjectId(user_id),
+                "date": workout_date_obj,
+                "total_duration_minutes": 30,  # Default duration
+                "total_calories_burned": 150,  # Default calories
+                "workout_notes": f"Completed {workout_type}. {notes}",
+                "activities": []
+            }
+            result = collection.insert_one(log_document)
             return True, str(result.inserted_id)
 
-        return False, "Failed to save workout log"
+        # Calculate total duration and estimated calories for the new format
+        total_duration = sum(block.get('duration', 0) for block in workout_activities)
 
+        # Get user weight for calorie estimation
+        user_collection = get_collection("fitlistic", "users")
+        user = user_collection.find_one({"_id": ObjectId(user_id)})
+        user_weight = user.get('weight', 70) if user else 70
+
+        # Calculate estimated calories
+        total_calories = 0
+        activities_log = []
+
+        for block in workout_activities:
+            activity = block.get('activity', {})
+            if not activity:
+                continue
+
+            activity_type = activity.get('type', 'unknown')
+            activity_id = str(activity.get('_id', ''))
+            duration = block.get('duration', 0)
+
+            # Add to activities log
+            activities_log.append({
+                "collection_name": activity_type,
+                "exercise_id": activity_id,
+                "duration_minutes": duration,
+                "notes": ""
+            })
+
+            # Add to calorie count
+            total_calories += estimate_calories_burned(activity_type, duration, user_weight)
+
+        # Create workout log document
+        workout_date_obj = datetime.strptime(workout_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        log_document = {
+            "user_id": ObjectId(user_id),
+            "date": workout_date_obj,
+            "total_duration_minutes": total_duration,
+            "total_calories_burned": total_calories,
+            "workout_notes": f"Completed {workout_type}. {notes}",
+            "activities": activities_log
+        }
+
+        # Insert the workout log
+        result = collection.insert_one(log_document)
+
+        return True, str(result.inserted_id)
     except Exception as e:
-        import traceback
-        print(f"Error saving workout log: {e}")
-        print(traceback.format_exc())
-        return False, f"Error saving workout log: {str(e)}"
+        return False, str(e)
+
+
+def estimate_calories_burned(activity_type, duration_minutes, weight_kg):
+    """Estimate calories burned based on activity type, duration, and user weight."""
+    # MET values (Metabolic Equivalent of Task) for different activities
+    met_values = {
+        "warm_up": 3.5,  # Light calisthenics
+        "cool_down": 2.5,  # Light stretching
+        "exercise": 5.0,  # General exercise
+        "stretching": 2.5,  # Stretching
+        "breathwork": 2.0,  # Breathing exercises
+        "meditation": 1.3,  # Sitting meditation
+        "cardio": 7.0,  # Moderate cardio
+        "strength": 5.0,  # Weight training
+        "hiit": 8.0,  # High-intensity interval training
+        "yoga": 3.0,  # Hatha yoga
+        "pilates": 3.5,  # Pilates
+        "unknown": 3.0  # Default value
+    }
+
+    # Get MET value for the activity type
+    met = met_values.get(activity_type.lower(), met_values["unknown"])
+
+    # Calculate calories: MET * weight (kg) * duration (hours)
+    # 1 MET = 1 kcal/kg/hour
+    hours = duration_minutes / 60
+    calories = met * weight_kg * hours
+
+    return round(calories)
 
 
 def mark_workout_as_completed(user_id, day_of_week):
@@ -597,7 +485,7 @@ def get_next_incomplete_workout_day(user_id, workout_plan):
 
 def get_active_workout_plan(user_id: str) -> dict | None:
     """
-    Get the user's active workout plan with full exercise details.
+    Get the user's active workout plan.
     Returns None if no active plan exists.
     """
     try:
@@ -619,77 +507,10 @@ def get_active_workout_plan(user_id: str) -> dict | None:
 
         if active_plan is None:
             print(f"❌ No active plan found for user {user_id}")
-
-            # Optional: Debug print to see what plans exist
-            all_plans = list(plans_collection.find({"user_id": user_obj_id}))
-            print("Existing plans:")
-            for plan in all_plans:
-                print(f"Plan ID: {plan.get('_id')}, Active: {plan.get('is_active')}")
             return None
 
-        # Print the raw plan structure for debugging
-        import json
-        print("Raw Active Plan:")
-        print(json.dumps(active_plan, default=str, indent=2))
-
-        # Prepare collections for loading full exercise details
-        collections = {
-            "exercises": get_collection("fitlistic", "exercises"),
-            "warm_ups": get_collection("fitlistic", "warm_ups"),
-            "cool_downs": get_collection("fitlistic", "cool_downs"),
-            "breathwork_techniques": get_collection("fitlistic", "breathwork_techniques"),
-            "meditation_templates": get_collection("fitlistic", "meditation_templates"),
-            "stretching_routines": get_collection("fitlistic", "stretching_routines")
-        }
-
-        # Enrich the schedule with full exercise details
-        enriched_schedule = {}
-        for day, day_data in active_plan['schedule'].items():
-            enriched_schedule[day] = {
-                'type': day_data['type'],
-                'workout_refs': []
-            }
-
-            for workout_ref in day_data.get('workout_refs', []):
-                try:
-                    # Determine the correct collection based on activity type
-                    collection_map = {
-                        'warm_up': 'warm_ups',
-                        'cool_down': 'cool_downs',
-                        'exercise': 'exercises',
-                        'breathwork': 'breathwork_techniques',
-                        'meditation': 'meditation_templates',
-                        'stretching': 'stretching_routines'
-                    }
-
-                    collection_name = collection_map.get(workout_ref.get('activity_type', 'exercise'), 'exercises')
-                    collection = collections[collection_name]
-
-                    # Try to fetch the full exercise details
-                    exercise = collection.find_one({"_id": workout_ref['reference_id']})
-
-                    if exercise:
-                        enriched_workout_ref = workout_ref.copy()
-                        enriched_workout_ref['exercise_details'] = exercise
-                        enriched_schedule[day]['workout_refs'].append(enriched_workout_ref)
-                    else:
-                        print(f"❌ No exercise found for {workout_ref}")
-
-                except Exception as e:
-                    print(f"Error processing workout ref: {e}")
-
-        # Create the enriched plan
-        enriched_plan = {
-            'metadata': active_plan.get('metadata', {}),
-            'schedule': enriched_schedule,
-            'is_active': active_plan.get('is_active', True)
-        }
-
-        # Print the enriched plan structure
-        print("Enriched Active Plan:")
-        print(json.dumps(enriched_plan, default=str, indent=2))
-
-        return enriched_plan
+        # Return the plan as is - we'll handle workout details in the display function
+        return active_plan
 
     except Exception as e:
         print(f"❌ Error retrieving active workout plan: {e}")
