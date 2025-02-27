@@ -11,6 +11,9 @@ def profile_page():
     st.set_page_config(page_title="Profile | Fitlistic", page_icon="👤", layout="centered")
     inject_custom_styles()
 
+    st.title("👤 Profile Management")
+    st.header("Edit your profile details like goals and more")
+
     with st.sidebar:
         st.header(f"Quick Options")
         handle_sidebar_buttons()
@@ -22,8 +25,6 @@ def profile_page():
 
     user = st.session_state.user
     user_id = user.get("_id")
-
-    st.title("👤 Edit your Profile")
 
     # Logout button below title but above tabs
     if st.button("Log Out", type="primary"):

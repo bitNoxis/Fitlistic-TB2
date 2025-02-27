@@ -7,23 +7,6 @@ from utils.mongo_helper import get_collection, get_active_workout_plan, save_wor
 from bson.objectid import ObjectId
 
 
-def get_random_motivational_quote():
-    """Return a random motivational fitness quote"""
-    quotes = [
-        "The only bad workout is the one that didn't happen.",
-        "Your body can stand almost anything. It's your mind that you have to convince.",
-        "The pain you feel today will be the strength you feel tomorrow.",
-        "Don't stop when you're tired. Stop when you're done.",
-        "Fitness is not about being better than someone else. It's about being better than you used to be.",
-        "The hard days are the best because that's when champions are made.",
-        "Success isn't always about greatness. It's about consistency.",
-        "The difference between try and triumph is just a little umph!",
-        "The only place where success comes before work is in the dictionary.",
-        "You don't have to be great to start, but you have to start to be great."
-    ]
-    return random.choice(quotes)
-
-
 def get_date_from_key(date_key):
     """Convert a date key from the database format to a datetime object"""
     try:
@@ -116,20 +99,76 @@ def get_next_workout_day(workout_plan, current_date_str):
 
 
 def check_new_plan(user_id):
-    """Check if a new plan was just created"""
+    """
+    Check if a new plan was just created and handle the transition from old to new plan.
+    Returns True if a new plan was detected, False otherwise.
+    """
     # Look for a query parameter indicating a new plan was created
     if st.query_params.get("new_plan") == "true":
-        # Reset to the first day of the plan
+        # Get the active plan
         active_plan = get_active_workout_plan(user_id)
         if active_plan and 'schedule' in active_plan:
+            # Get sorted date keys from the new plan
             date_keys = sorted(active_plan['schedule'].keys())
             if date_keys:
+                # Set viewed date to the first date in the new plan
                 st.session_state.viewed_date = date_keys[0]
+                # Also update the "date" query parameter to match
+                st.query_params["date"] = date_keys[0]
 
-        # Clear the query parameter to avoid repeated resets
+        # Clear the new_plan query parameter to avoid repeated resets
         st.query_params["new_plan"] = ""
         return True
     return False
+
+
+def handle_missing_workout(active_plan, current_date):
+    """
+    Handle the case when no workout is found for the current date.
+    Provides user-friendly options instead of just showing an error.
+    """
+    st.error(f"No workout found for {format_date_for_display(current_date)}.")
+
+    if active_plan and 'schedule' in active_plan:
+        st.write("Let's find a valid workout day for you:")
+
+        # Get sorted date keys
+        date_keys = sorted(active_plan['schedule'].keys())
+
+        if date_keys:
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("Go to First Day", use_container_width=True):
+                    st.session_state.viewed_date = date_keys[0]
+                    st.query_params["date"] = date_keys[0]
+                    st.rerun()
+
+            with col2:
+                # Find today's date in YYYY-MM-DD format
+                today_str = datetime.now().date().strftime("%Y-%m-%d")
+
+                # Check if today exists in the plan
+                if today_str in date_keys:
+                    if st.button("Go to Today's Workout", use_container_width=True):
+                        st.session_state.viewed_date = today_str
+                        st.query_params["date"] = today_str
+                        st.rerun()
+                else:
+                    # Find the closest future date
+                    future_dates = [d for d in date_keys if d >= today_str]
+                    if future_dates:
+                        next_date = min(future_dates)
+                        day_num = get_day_number(next_date, active_plan) or "next"
+                        if st.button(f"Go to Day {day_num}", use_container_width=True):
+                            st.session_state.viewed_date = next_date
+                            st.query_params["date"] = next_date
+                            st.rerun()
+
+    # Offer to create a new plan
+    st.write("Or you can create a new workout plan:")
+    if st.button("Create New Workout Plan", type="primary"):
+        st.switch_page("pages/5_📋_Workout-Creator.py")
 
 
 @auth_required
@@ -137,7 +176,8 @@ def exercise_page():
     st.set_page_config(page_title="Exercise", page_icon="💪", layout="centered")
     inject_custom_styles()
 
-    st.title("💪 Your Workout")
+    st.title("💪 Your Holistic Workout")
+    st.header("Exercise for your body and mind")
 
     user_id = str(st.session_state.user.get('_id'))
     active_plan = get_active_workout_plan(user_id)
@@ -168,8 +208,10 @@ def exercise_page():
             else:
                 # Find the closest date in the plan
                 date_keys = sorted(active_plan['schedule'].keys())
-                closest_date = min(date_keys, key=lambda x: abs(
-                    (get_date_from_key(x) or today) - today)) if date_keys else today_str
+                closest_date = min(
+                    date_keys,
+                    key=lambda x: abs((get_date_from_key(x) or today) - today)
+                ) if date_keys else today_str
                 st.session_state.viewed_date = closest_date
 
     # Check if a specific date was requested via query parameter
@@ -189,6 +231,27 @@ def exercise_page():
     # Add date navigation
     if start_date:
         st.write("**Navigate Days:**")
+
+        HIGHLIGHT_CSS = """
+        <style>
+        .day-active {
+            background-color: #55b82e; 
+            color: #000;
+            min-width: 90px;              
+            padding: 8px 16px;       
+            border-radius: 8px;       
+            font-weight: 700;         
+            display: inline-block;    
+            text-align: center;       
+            margin-top: 0px;
+            margin-bottom: 10px;
+          
+        }
+        </style>
+        """
+
+        st.markdown(HIGHLIGHT_CSS, unsafe_allow_html=True)
+
         date_keys = sorted(active_plan['schedule'].keys())
 
         # Create a row of small buttons for day navigation
@@ -201,7 +264,10 @@ def exercise_page():
 
                 # Highlight the current day
                 if date_key == current_date:
-                    st.markdown(f"**[{day_label}]**")
+                    st.markdown(
+                        f"<div class='day-active'>{day_label}</div>",
+                        unsafe_allow_html=True
+                    )
                 else:
                     if st.button(day_label, key=f"day_{date_key}", use_container_width=True):
                         st.session_state.viewed_date = date_key
@@ -211,11 +277,26 @@ def exercise_page():
     current_workout = active_plan['schedule'].get(current_date)
 
     if current_workout is None:
+        # Show error message, but also provide options
         st.error(f"No workout found for {format_date_for_display(current_date)}.")
-        return
 
-    if current_workout is None:
-        st.error(f"No workout found for {format_date_for_display(current_date)}.")
+        # Get the date list from the plan
+        date_keys = sorted(active_plan['schedule'].keys())
+
+        if date_keys:
+            st.write("Your plan was successful created but needs to be loaded.")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Load the new plan", use_container_width=True):
+                    st.session_state.viewed_date = date_keys[0]
+                    st.query_params["date"] = date_keys[0]
+                    st.rerun()
+
+            with col2:
+                if st.button("Create New Plan", use_container_width=True):
+                    st.switch_page("pages/5_📋_Workout-Creator.py")
+
         return
 
     # Get the day number for display
@@ -224,15 +305,17 @@ def exercise_page():
 
     if current_workout['type'] == 'Rest Day':
         st.header(f"Day {day_number} ({format_date_for_display(current_date)})")
-        st.markdown("""
-        ### 🌟 Time to Recharge! 
+        st.markdown(
+            """
+            ### 🌟 Time to Recharge! 
 
-        Today is your well-deserved rest day! Remember:
-        - 😴 Rest is when your body gets stronger
-        - 🧘‍♀️ Light stretching and walks are a perfect way to optimize recovery
-        - 🎮 Enjoy some guilt-free relaxation
-        - 🥗 Focus on good nutrition and hydration
-        """)
+            This is your well-deserved rest day! Remember:
+            - 😴 Rest is when your body gets stronger
+            - 🧘‍♀️ Light stretching and walks are a perfect way to optimize recovery
+            - 🎮 Enjoy some guilt-free relaxation
+            - 🥗 Focus on good nutrition and hydration
+            """
+        )
 
         # Find the next workout day
         next_day = get_next_workout_day(active_plan, current_date)
@@ -252,15 +335,8 @@ def exercise_page():
     st.header(f"Day {day_number} ({format_date_for_display(current_date)})")
 
     if is_completed:
-        # Show completion image and motivational quote
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            st.image("images/Finish.png", width=400)
-
-        with col2:
-            st.success("✅ Workout Completed!")
-            st.markdown(f"### \"{get_random_motivational_quote()}\"")
+        # Instead of showing the old finish image and quote, we just show a success message
+        st.success("✅ Workout Completed!")
 
         # Offer to show the next day's workout
         next_day = get_next_workout_day(active_plan, current_date)
@@ -309,7 +385,7 @@ def exercise_page():
                 if next_day:
                     next_day_num = get_day_number(next_day, active_plan)
                     next_day_label = f"Day {next_day_num}"
-                    if st.button(f"View {next_day_label}"):
+                    if st.button(f"Back to the overview"):
                         st.session_state.viewed_date = next_day
                         st.query_params["date"] = next_day
                         st.rerun()
@@ -348,14 +424,13 @@ def display_workout_details(workout, user_id):
         # Check if there are exercises to display
         if not workout_refs:
             st.info(
-                "No exercises found for this workout day. This may be a rest day or a plan created with an older version.")
+                "No exercises found for this workout day. This may be a rest day or a plan created with an older version."
+            )
             return
 
-        # Get workout references and display them
-        # This is a placeholder - you'll need to adjust based on how workout_refs are structured
+        # Display what we can from the old structure
         st.info("This workout plan was created with an older version. Please create a new plan for full details.")
 
-        # Display what we can from the old structure
         for i, ref in enumerate(workout_refs, 1):
             st.write(f"{i}. Activity duration: {ref.get('duration', 'N/A')} minutes")
 
@@ -468,7 +543,8 @@ def display_workout_details(workout, user_id):
             # Handle meditation with steps - display in nicely formatted way only
             meditation_steps = activity.get("steps", [])
             if meditation_steps and isinstance(meditation_steps, list) and all(
-                    isinstance(step, dict) for step in meditation_steps):
+                    isinstance(step, dict) for step in meditation_steps
+            ):
                 for step in meditation_steps:
                     st.markdown(f"**Phase: {step.get('phase', 'Unknown phase')}**")
 

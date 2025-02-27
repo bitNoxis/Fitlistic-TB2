@@ -506,7 +506,6 @@ def get_active_workout_plan(user_id: str) -> dict | None:
         })
 
         if active_plan is None:
-            print(f"❌ No active plan found for user {user_id}")
             return None
 
         # Return the plan as is - we'll handle workout details in the display function

@@ -182,6 +182,33 @@ def overview_page():
     else:
         st.info("Log at least 5 well-being entries to see your progress graph.")
 
+        if st.button("Add 5 Test Entries"):
+            day_offsets = [5, 4, 3, 2, 1]
+            test_scores = [3, 4, 5, 4, 5]
+            test_notes = [
+                "Feeling a bit tired",
+                "Pretty good overall",
+                "Great mood!",
+                "A little stressed",
+                "Fantastic day"
+            ]
+
+            for offset, score, note in zip(day_offsets, test_scores, test_notes):
+                date_entry = datetime.now(timezone.utc).replace(
+                    hour=12, minute=0, second=0, microsecond=0
+                ) - timedelta(days=offset)
+
+                doc = {
+                    "user_id": ObjectId(user["_id"]),
+                    "date": date_entry,
+                    "score": score,
+                    "notes": note
+                }
+                collection.insert_one(doc)
+
+            st.success("5 test well-being entries added! Reloading...")
+            st.rerun()
+
     st.header("Log Your Mood")
 
     collection = get_collection("fitlistic", "wellbeing_scores")
@@ -273,11 +300,6 @@ def overview_page():
             "user_id": ObjectId(user["_id"])
         }))
 
-        # Last workout
-        last_workout = None
-        if all_logs:
-            last_workout = max(all_logs, key=lambda x: x["date"])
-
         # Calculate metrics
         workouts_week = len(week_logs)
         workouts_month = len(month_logs)
@@ -294,16 +316,13 @@ def overview_page():
         # Show stats based on available data
         if workouts_total > 0:
             # Main metrics
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Current Streak", f"{streak} days")
+                st.metric("Current Streak", f"{streak} day(s)")
             with col2:
                 st.metric("Total Workouts", workouts_total)
             with col3:
                 st.metric("This Week", workouts_week)
-            with col4:
-                last_date = last_workout["date"].strftime("%b %d") if last_workout else "Never"
-                st.metric("Last Workout", last_date)
 
             # Secondary metrics
             col1, col2, col3 = st.columns(3)
@@ -325,6 +344,8 @@ def overview_page():
         st.error(f"Error fetching workout stats: {e}")
         import traceback
         traceback.print_exc()
+
+    st.image("images/Finish.png", width=200)
 
 
 overview_page()

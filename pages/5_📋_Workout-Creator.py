@@ -140,7 +140,7 @@ def get_weekly_plan_tab():
 
                 if success:
                     st.success("Workout plan saved successfully!")
-                    st.success("You can look at the plan at the Exercise page")
+                    st.success("You can look at the plan at the Exercise page.")
                 else:
                     st.error(f"Failed to save plan: {message}")
 
@@ -149,25 +149,15 @@ def display_weekly_plan(plan):
     # Display summary metrics
     col1, col2, col3 = st.columns(3)
 
-    # Count total exercises across all days
-    total_exercises = 0
-    for day in plan['schedule'].values():
-        for block in day['schedule']:
-            # Count main exercises
-            if block.get('activity', {}).get('type') == 'exercise':
-                total_exercises += 1
-            # Count exercises in phases (warm-ups, cool-downs)
-            if 'phases' in block.get('activity', {}):
-                for phase in block['activity']['phases']:
-                    total_exercises += len(phase.get('exercises', []))
-            # Count stretching sequence
-            if 'sequence' in block.get('activity', {}):
-                total_exercises += len(block['activity'].get('sequence', []))
 
     with col1:
-        st.metric("Total Exercises", total_exercises)
+        # Total workout days instead of exercise count
+        active_days = len([day for day in plan['schedule'].values()
+                           if day['type'] != 'Rest Day'])
+        st.metric("Workout Days", active_days)
 
     with col2:
+        # Total minutes - keep this useful metric
         total_minutes = sum(
             sum(block['duration'] for block in day['schedule'])
             for day in plan['schedule'].values()
@@ -175,9 +165,12 @@ def display_weekly_plan(plan):
         st.metric("Total Minutes", total_minutes)
 
     with col3:
-        active_days = len([day for day in plan['schedule'].values()
-                           if day['type'] != 'Rest Day'])
-        st.metric("Active Days", active_days)
+        # Average minutes per workout day
+        if active_days > 0:
+            avg_minutes = total_minutes / active_days
+            st.metric("Avg. Minutes/Day", round(avg_minutes))
+        else:
+            st.metric("Avg. Minutes/Day", 0)
 
     # Create tabs for each day of the plan
     days = list(plan['schedule'].keys())
@@ -205,7 +198,7 @@ def display_rest_day_message():
     st.markdown("""
     ### 🌟 Rest Day! Time to Recharge! 
 
-    Today is your well-deserved rest day! Remember:
+    This is your well-deserved rest day! Remember:
     - 😴 Rest is when your body gets stronger
     - 🧘‍♀️ Light stretching and walks are a perfect way to optimize recovery
     - 🎮 Enjoy some guilt-free relaxation
