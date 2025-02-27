@@ -192,8 +192,6 @@ def exercise_page():
                 else:
                     st.success("You've completed all scheduled workouts this week!")
 
-                if st.button("Return to Home"):
-                    st.switch_page("pages/1_🏠_Overview.py")
             else:
                 st.error(f"Failed to log workout: {message}")
 

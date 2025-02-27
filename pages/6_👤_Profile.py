@@ -8,12 +8,12 @@ import json
 
 @auth_required
 def profile_page():
-    """
-    Display and manage the user profile page.
-    Allows users to view and edit their profile details.
-    """
     st.set_page_config(page_title="Profile | Fitlistic", page_icon="👤", layout="centered")
     inject_custom_styles()
+
+    with st.sidebar:
+        st.header(f"Quick Options")
+        handle_sidebar_buttons()
 
     # Get user from session state
     if "user" not in st.session_state:
@@ -209,6 +209,15 @@ def profile_page():
                             st.error("Current password is incorrect or there was an error updating your password.")
 
             # Logout button was moved to the top of the page
+
+
+def handle_sidebar_buttons():
+    if st.button("Log Out"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.success("You have been logged out successfully.")
+    if st.button("New Account"):
+        st.switch_page("pages/_Register.py")
 
 
 def update_profile_data(user_id, update_data):

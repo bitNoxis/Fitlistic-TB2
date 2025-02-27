@@ -65,21 +65,21 @@ def handle_sidebar_buttons():
     goals = st.session_state.user.get('fitness_goals', [])
     if "Weight Loss" in goals:
         if st.button("🏃‍♂️ Fat Burning Workout"):
-            handle_workout_click("Create a fat burning HIIT workout suitable for my fitness level")
+            handle_workout_click("Create a one time fat burning HIIT workout suitable for my fitness level")
     if "Muscle Gain" in goals:
         if st.button("💪 Strength Training"):
-            handle_workout_click("Create a strength training workout focused on muscle gain")
+            handle_workout_click("Create a one time strength training workout focused on muscle gain")
     if "Flexibility" in goals:
         if st.button("🧘‍♀️ Flexibility"):
-            handle_workout_click("Create a flexibility and mobility routine")
+            handle_workout_click("Create a one time flexibility and mobility routine")
     if "Endurance" in goals:
         if st.button("🏃 Endurance Training"):
-            handle_workout_click("Create an endurance-focused workout")
+            handle_workout_click("Create a one time  endurance-focused workout")
     if not goals:
         if st.button("🏃‍♂️ Cardio Workout"):
-            handle_workout_click("Create a 30-minute cardio workout for beginners")
+            handle_workout_click("Create a one time 30-minute cardio workout for beginners")
         if st.button("💪 Full Body Workout"):
-            handle_workout_click("Create a full-body workout for general fitness")
+            handle_workout_click("Create a one time  full-body workout for general fitness")
     if st.button("🗑️ Clear Chat"):
         st.session_state.messages = [{"role": "assistant", "content": get_initial_message()}]
         st.rerun()
@@ -127,6 +127,9 @@ def get_system_prompt():
     bmi = calculate_bmi(user.get("weight", 70), user.get("height", 170))
     goals = user.get("fitness_goals", ["General Fitness"])
     return f"""You are a knowledgeable holistic fitness coach who cares about both mental and physical health, as well as nutrition. Using the following user profile, provide balanced and personalized guidance:
+
+If you are asked about a long term workout plan that has more than one workout for one day, dont answer. Just say that the user can create one in the Workout creator
+If it makes sense smartly advertise the Workout Creator from the App 
 
 - Fitness goals: {', '.join(goals)}
 - Weight: {user.get('weight', 70)} kg
