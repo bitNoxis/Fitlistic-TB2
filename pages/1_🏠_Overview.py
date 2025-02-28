@@ -345,7 +345,9 @@ def overview_page():
         import traceback
         traceback.print_exc()
 
-    st.image("images/Finish.png", width=200)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("images/Finish.png", width=300)
 
 
 overview_page()
