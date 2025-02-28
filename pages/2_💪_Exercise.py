@@ -202,6 +202,10 @@ def check_new_plan(user_id):
 
         # Clear the new_plan query parameter to avoid repeated resets
         st.query_params["new_plan"] = ""
+
+        # Rerun the app to reflect the changes immediately
+        st.rerun()
+
         return True
     return False
 
@@ -217,10 +221,9 @@ def handle_missing_workout(active_plan, current_date):
     Returns:
         None
     """
-    st.info(f"You changed your holistic fitness plan Here you can activate it.")
+    st.info("Your new workout plan is ready! Please select an option below to view it.")
 
     if active_plan and 'schedule' in active_plan:
-        st.write("Let's find a valid workout day for you:")
 
         # Get sorted date keys
         date_keys = sorted(active_plan['schedule'].keys())
@@ -240,7 +243,7 @@ def handle_missing_workout(active_plan, current_date):
 
                 # Check if today exists in the plan
                 if today_str in date_keys:
-                    if st.button("Go to Today's Workout", use_container_width=True):
+                    if st.button("Go to Today's Workout of the new Plan", use_container_width=True):
                         st.session_state.viewed_date = today_str
                         st.query_params["date"] = today_str
                         st.rerun()

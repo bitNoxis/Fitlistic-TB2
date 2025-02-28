@@ -284,6 +284,12 @@ def display_weekly_plan(plan: Dict[str, Any]) -> None:
         else:
             st.metric("Avg. Minutes/Day", 0)
 
+    # Add button to create a new plan right after metrics
+    if st.button("Create Different Plan", key="new_plan_button"):
+        # Clear the existing plan
+        del st.session_state.weekly_plan
+        st.rerun()
+
     # Create tabs for each day of the plan
     days = list(plan['schedule'].keys())
     day_labels = [f"Day {i + 1}" for i in range(len(days))]
@@ -308,7 +314,7 @@ def display_weekly_plan(plan: Dict[str, Any]) -> None:
     # Save plan button
     col1, col2 = st.columns([1, 4])
     with col1:
-        if st.button("💾 Save & Activate Plan", key="save_plan_button"):
+        if st.button("💾 Save & Activate Plan", type="primary", key="save_plan_button"):
             user_id = str(st.session_state.user.get('_id'))
             success, message = save_workout_plan(user_id, plan)
 
@@ -329,12 +335,6 @@ def get_weekly_plan_tab() -> None:
     # If a plan exists in session state, display it first
     if 'weekly_plan' in st.session_state:
         display_weekly_plan(st.session_state.weekly_plan)
-
-        # Add button to create a new plan
-        if st.button("Create Different Plan", key="new_plan_button"):
-            # Clear the existing plan
-            del st.session_state.weekly_plan
-            st.rerun()
         return
 
     # Get today's date
