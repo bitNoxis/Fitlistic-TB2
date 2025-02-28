@@ -1,7 +1,7 @@
 # Fitlistic
 
 **Deployed App:** <a href="https://fitlistic.streamlit.app/" target="_blank">Open Fitlistic</a>  
-**Project Report:** [project-report.pdf](./project-report.pdf)
+**Project Report:** [project-report.pdf](./Project-Report.pdf)
 
 ---
 
