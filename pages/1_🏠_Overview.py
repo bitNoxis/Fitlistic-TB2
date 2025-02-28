@@ -1,8 +1,12 @@
-import calendar
+"""
+Overview Page Module
+
+This module provides the main dashboard view for the Fitlistic application,
+displaying user stats, workout data, and well-being tracking.
+"""
+
 from datetime import datetime, timezone, timedelta
 
-import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from bson import ObjectId
@@ -12,9 +16,26 @@ from utils.app_style import inject_custom_styles
 from utils.auth_helper import auth_required
 from utils.mongo_helper import get_collection
 
+# Constants
+DB_NAME = "fitlistic"
+WORKOUT_LOGS_COLLECTION = "workout_logs"
+WELLBEING_COLLECTION = "wellbeing_scores"
+DAYS_IN_WEEK = 7
+DAYS_IN_MONTH = 30
+MIN_ENTRIES_FOR_GRAPH = 5
+
 
 def get_user_streak(user_id):
-    collection = get_collection("fitlistic", "workout_logs")
+    """
+    Calculate the user's current workout streak in consecutive days.
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        Integer representing consecutive days of workouts
+    """
+    collection = get_collection(DB_NAME, WORKOUT_LOGS_COLLECTION)
     if collection is None:
         return 0
 
@@ -66,38 +87,31 @@ def get_user_streak(user_id):
     return streak
 
 
-@auth_required
-def overview_page():
-    st.set_page_config(page_title="Overview", page_icon="🏠", layout="centered")
-    inject_custom_styles()
+def display_wellbeing_progress(user_id):
+    """
+    Display the user's well-being progress graph.
 
-    # Get user data from session
-    user = st.session_state.get("user")
-    if user:
-        user_name = user.get("first_name", "Friend")
-    else:
-        user_name = "Friend"
-    st.title(f"Great to see you, {user_name}! 😊")
+    Args:
+        user_id: User ID string
 
-    with st.sidebar:
-        st.header(f"Quick Options")
-        handle_sidebar_buttons()
-
-    # ------------------- Well-Being Progress Graph -------------------
+    Returns:
+        None
+    """
     st.header("Your Well-Being Progress")
     try:
         # Fetch all well-being entries for this user, sorted by date ascending
-        collection = get_collection("fitlistic", "wellbeing_scores")
-        wellbeing_docs = list(collection.find({"user_id": ObjectId(user["_id"])}).sort("date", 1))
+        collection = get_collection(DB_NAME, WELLBEING_COLLECTION)
+        wellbeing_docs = list(collection.find({"user_id": ObjectId(user_id)}).sort("date", 1))
     except Exception as e:
         st.error(f"Error fetching well-being scores: {e}")
         wellbeing_docs = []
 
-    if len(wellbeing_docs) >= 5:
+    if len(wellbeing_docs) >= MIN_ENTRIES_FOR_GRAPH:
+        # Format dates and extract scores for plotting
         dates = [doc["date"].strftime("%b %d") for doc in wellbeing_docs]
         scores = [doc.get("score", 0) for doc in wellbeing_docs]
-        notes = [doc.get("notes", "No note") for doc in wellbeing_docs]
 
+        # Create interactive plotly chart
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=dates,
@@ -108,6 +122,8 @@ def overview_page():
             customdata=[doc.get("notes", "No note") for doc in wellbeing_docs],
             hovertemplate="<b>Score: %{y}</b><br>Note: %{customdata}<extra></extra>"
         ))
+
+        # Configure chart appearance
         fig.update_layout(
             title="Well-Being Score Over Time",
             xaxis_title="Date",
@@ -125,37 +141,65 @@ def overview_page():
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Log at least 5 well-being entries to see your progress graph.")
+        display_test_entries_button(user_id)
 
-        if st.button("Add 5 Test Entries"):
-            day_offsets = [5, 4, 3, 2, 1]
-            test_scores = [3, 4, 5, 4, 5]
-            test_notes = [
-                "Feeling a bit tired",
-                "Pretty good overall",
-                "Great mood!",
-                "A little stressed",
-                "Fantastic day"
-            ]
 
-            for offset, score, note in zip(day_offsets, test_scores, test_notes):
-                date_entry = datetime.now(timezone.utc).replace(
-                    hour=12, minute=0, second=0, microsecond=0
-                ) - timedelta(days=offset)
+def display_test_entries_button(user_id):
+    """
+    Display a button to add test well-being entries for demonstration.
 
-                doc = {
-                    "user_id": ObjectId(user["_id"]),
-                    "date": date_entry,
-                    "score": score,
-                    "notes": note
-                }
-                collection.insert_one(doc)
+    Args:
+        user_id: User ID string
 
-            st.success("5 test well-being entries added! Reloading...")
-            st.rerun()
+    Returns:
+        None
+    """
+    if st.button("Add 5 Test Entries"):
+        collection = get_collection(DB_NAME, WELLBEING_COLLECTION)
+        if collection is None:
+            st.error("Database connection failed.")
+            return
 
+        day_offsets = [5, 4, 3, 2, 1]
+        test_scores = [3, 4, 5, 4, 5]
+        test_notes = [
+            "Feeling a bit tired",
+            "Pretty good overall",
+            "Great mood!",
+            "A little stressed",
+            "Fantastic day"
+        ]
+
+        for offset, score, note in zip(day_offsets, test_scores, test_notes):
+            date_entry = datetime.now(timezone.utc).replace(
+                hour=12, minute=0, second=0, microsecond=0
+            ) - timedelta(days=offset)
+
+            doc = {
+                "user_id": ObjectId(user_id),
+                "date": date_entry,
+                "score": score,
+                "notes": note
+            }
+            collection.insert_one(doc)
+
+        st.success("5 test well-being entries added! Reloading...")
+        st.rerun()
+
+
+def display_mood_logger(user_id):
+    """
+    Display the mood logging interface.
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        None
+    """
     st.header("Log Your Mood")
 
-    collection = get_collection("fitlistic", "wellbeing_scores")
+    collection = get_collection(DB_NAME, WELLBEING_COLLECTION)
     if collection is None:
         st.error("Database connection failed.")
         return
@@ -167,7 +211,7 @@ def overview_page():
 
     # Query for an entry in the current day
     found = collection.find_one({
-        "user_id": ObjectId(user["_id"]),
+        "user_id": ObjectId(user_id),
         "date": {
             "$gte": today_start,
             "$lt": tomorrow_start
@@ -191,7 +235,7 @@ def overview_page():
             if st.button("Submit Mood"):
                 try:
                     mood_doc = {
-                        "user_id": ObjectId(user["_id"]),
+                        "user_id": ObjectId(user_id),
                         "date": datetime.now(timezone.utc),
                         "score": mood_rating,
                         "notes": mood_notes
@@ -201,90 +245,206 @@ def overview_page():
                 except Exception as e:
                     st.error(f"Error logging mood: {e}")
 
-    # ------------------- Enhanced Weekly Progress Section -------------------
-    st.header("Your Fitness Stats")
 
+def get_workout_logs_by_period(user_id):
+    """
+    Fetch workout logs for different time periods.
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        Dictionary with workout logs for different time periods
+    """
     try:
-        workout_collection = get_collection("fitlistic", "workout_logs")
+        workout_collection = get_collection(DB_NAME, WORKOUT_LOGS_COLLECTION)
         now = datetime.now(timezone.utc)
-        seven_days_ago = now - timedelta(days=7)
-        thirty_days_ago = now - timedelta(days=30)
-
-        # Current streak
-        streak = get_user_streak(user["_id"])
+        seven_days_ago = now - timedelta(days=DAYS_IN_WEEK)
+        thirty_days_ago = now - timedelta(days=DAYS_IN_MONTH)
 
         # Get all workout logs for various time periods
         week_logs = list(workout_collection.find({
-            "user_id": ObjectId(user["_id"]),
+            "user_id": ObjectId(user_id),
             "date": {"$gte": seven_days_ago}
         }))
 
         month_logs = list(workout_collection.find({
-            "user_id": ObjectId(user["_id"]),
+            "user_id": ObjectId(user_id),
             "date": {"$gte": thirty_days_ago}
         }))
 
         all_logs = list(workout_collection.find({
-            "user_id": ObjectId(user["_id"])
+            "user_id": ObjectId(user_id)
         }))
 
+        return {
+            "week": week_logs,
+            "month": month_logs,
+            "all": all_logs
+        }
+    except Exception as e:
+        st.error(f"Error fetching workout logs: {e}")
+        return {"week": [], "month": [], "all": []}
+
+
+def calculate_fitness_metrics(logs):
+    """
+    Calculate fitness metrics from workout logs.
+
+    Args:
+        logs: Dictionary with workout logs for different time periods
+
+    Returns:
+        Dictionary with calculated metrics
+    """
+    week_logs = logs["week"]
+    month_logs = logs["month"]
+    all_logs = logs["all"]
+
+    workouts_week = len(week_logs)
+    workouts_month = len(month_logs)
+    workouts_total = len(all_logs)
+
+    minutes_week = sum(log.get("total_duration_minutes", 0) for log in week_logs)
+    minutes_month = sum(log.get("total_duration_minutes", 0) for log in month_logs)
+    minutes_total = sum(log.get("total_duration_minutes", 0) for log in all_logs)
+
+    calories_week = sum(log.get("total_calories_burned", 0) for log in week_logs)
+    calories_month = sum(log.get("total_calories_burned", 0) for log in month_logs)
+    calories_total = sum(log.get("total_calories_burned", 0) for log in all_logs)
+
+    avg_time = round(minutes_total / workouts_total, 1) if workouts_total > 0 else 0
+
+    return {
+        "workouts_week": workouts_week,
+        "workouts_month": workouts_month,
+        "workouts_total": workouts_total,
+        "minutes_week": minutes_week,
+        "minutes_month": minutes_month,
+        "minutes_total": minutes_total,
+        "calories_week": calories_week,
+        "calories_month": calories_month,
+        "calories_total": calories_total,
+        "avg_time": avg_time
+    }
+
+
+def display_fitness_stats(user_id):
+    """
+    Display the user's fitness statistics.
+
+    Args:
+        user_id: User ID string
+
+    Returns:
+        None
+    """
+    st.header("Your Fitness Stats")
+
+    try:
+        # Get workout logs
+        logs = get_workout_logs_by_period(user_id)
+
         # Calculate metrics
-        workouts_week = len(week_logs)
-        workouts_month = len(month_logs)
-        workouts_total = len(all_logs)
+        metrics = calculate_fitness_metrics(logs)
 
-        minutes_week = sum(log.get("total_duration_minutes", 0) for log in week_logs)
-        minutes_month = sum(log.get("total_duration_minutes", 0) for log in month_logs)
-        minutes_total = sum(log.get("total_duration_minutes", 0) for log in all_logs)
-
-        calories_week = sum(log.get("total_calories_burned", 0) for log in week_logs)
-        calories_month = sum(log.get("total_calories_burned", 0) for log in month_logs)
-        calories_total = sum(log.get("total_calories_burned", 0) for log in all_logs)
+        # Get current streak
+        streak = get_user_streak(user_id)
 
         # Show stats based on available data
-        if workouts_total > 0:
+        if metrics["workouts_total"] > 0:
             # Main metrics
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Current Streak", f"{streak} day(s)")
             with col2:
-                st.metric("Total Workouts", workouts_total)
+                st.metric("Total Workouts", metrics["workouts_total"])
             with col3:
-                st.metric("This Week", workouts_week)
+                st.metric("This Week", metrics["workouts_week"])
 
             # Secondary metrics
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Total Time", f"{minutes_total} min")
+                st.metric("Total Time", f"{metrics['minutes_total']} min")
             with col2:
-                st.metric("Total Calories", f"{calories_total} kcal")
+                st.metric("Total Calories", f"{metrics['calories_total']} kcal")
             with col3:
-                avg_time = round(minutes_total / workouts_total, 1) if workouts_total > 0 else 0
-                st.metric("Avg. Duration", f"{avg_time} min")
-
-
+                st.metric("Avg. Duration", f"{metrics['avg_time']} min")
         else:
             st.info("No workouts logged yet. Get started with your first workout!")
             if st.button("Start Your First Workout"):
                 st.switch_page("pages/2_💪_Exercise.py")
 
     except Exception as e:
-        st.error(f"Error fetching workout stats: {e}")
+        st.error(f"Error displaying fitness stats: {e}")
         import traceback
         traceback.print_exc()
 
+
+def display_sidebar_options():
+    """
+    Display quick action buttons in the sidebar.
+
+    Returns:
+        None
+    """
+    with st.sidebar:
+        st.header("Quick Options")
+        if st.button("Today's Workout", type="primary", key="today_workout"):
+            st.switch_page("pages/2_💪_Exercise.py")
+        if st.button("Do a one time Workout", type="primary", key="try"):
+            st.switch_page("pages/4_✨_AI-Coach.py")
+        if st.button("Get a full 7 day Workout plan", type="secondary", key="upperbody"):
+            st.switch_page("pages/5_📋_Workout-Creator.py")
+
+
+@auth_required
+def overview_page():
+    """
+    Main function to display the overview dashboard.
+
+    This page shows the user's fitness statistics, well-being progress,
+    and provides a mood tracking interface.
+    """
+    # Configure the page
+    st.set_page_config(page_title="Overview", page_icon="🏠", layout="centered")
+    inject_custom_styles()
+
+    # Get user data from session
+    user = st.session_state.get("user")
+    if user:
+        user_name = user.get("first_name", "Friend")
+        user_id = user["_id"]
+    else:
+        user_name = "Friend"
+        user_id = None
+        st.error("User data not found. Please log in again.")
+        return
+
+    # Display greeting
+    st.title(f"Great to see you, {user_name}! 😊")
+
+    # Display sidebar options
+    display_sidebar_options()
+
+    # Display well-being progress
+    display_wellbeing_progress(user_id)
+
+    # Display mood logger
+    display_mood_logger(user_id)
+
+    # Display fitness stats
+    display_fitness_stats(user_id)
+
+    # Display footer image
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("images/Finish.png", width=300)
+        try:
+            st.image("images/Finish.png", width=300)
+        except Exception as e:
+            # If image fails to load, just skip it without displaying an error
+            pass
 
 
-def handle_sidebar_buttons():
-    if st.button("Today's Workout", type="primary", key="today_workout"):
-        st.switch_page("pages/2_💪_Exercise.py")
-    if st.button("Do a one time workout", type="primary", key="try"):
-        st.switch_page("pages/4_✨_AI-Coach.py")
-    if st.button("Get a full 7 day workout plan", type="secondary", key="upperbody"):
-        st.switch_page("pages/5_📋_Workout-Creator.py")
-
-
+# Run the page
 overview_page()
