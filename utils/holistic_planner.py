@@ -1,32 +1,65 @@
+"""
+Workout Plan Generator
+
+This module provides functions to generate personalized workout plans based on user
+data and preferences. It fetches appropriate exercises, warm-ups, cool-downs, 
+meditation, stretching routines and breathwork activities from collections and assembles them into
+daily and weekly schedules.
+"""
+
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Tuple, Optional, Any
 
-# Global caches to avoid re-fetching data (optional)
-exercise_cache = {}
+# Constants for workout configuration
+WORKOUT_DURATIONS = [15, 30, 45, 60]
+DEFAULT_WORKOUT_DURATION = 30
+DEFAULT_WARMUP_TIMES = {15: 4, 30: 5, 45: 5, 60: 7}
+DEFAULT_BREATHWORK_TIMES = {15: 0, 30: 3, 45: 5, 60: 5}
+DEFAULT_COOLDOWN_TIMES = {15: 4, 30: 5, 45: 5, 60: 7}
+DEFAULT_MEDITATION_TIMES = {15: 3, 30: 5, 45: 5, 60: 7}
+DEFAULT_STRETCHING_TIMES = {15: 0, 30: 0, 45: 0, 60: 10}
+DEFAULT_EXERCISE_COUNTS = {15: 2, 30: 2, 45: 4, 60: 4}
+
+# Define difficulty levels
+DIFFICULTY_LEVELS = ['beginner', 'intermediate', 'advanced']
+
+# Collection types
+COLLECTION_TYPES = ['exercises', 'warm_ups', 'cool_downs', 'stretching', 'meditation', 'breathwork']
+
+# Global cache to avoid re-fetching data
 template_cache = {}
 
 
 def validate_user_data(user_data: Dict) -> None:
-    """Validate required user data fields."""
+    """
+    Validate required user data fields for workout plan generation.
+
+    Args:
+        user_data: Dictionary containing user profile and preferences
+
+    Raises:
+        ValueError: If required fields are missing or invalid
+    """
     required_fields = [
         'weight', 'height', 'fitness_goals', 'experience_level',
         'preferred_rest_day', 'workout_duration', 'start_date', 'date_range'
     ]
+
+    # Check for missing fields
     missing_fields = [field for field in required_fields if field not in user_data]
     if missing_fields:
         raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
 
+    # Validate field types and values
     if not isinstance(user_data['fitness_goals'], list):
         raise ValueError("fitness_goals must be a list")
 
-    valid_levels = ['beginner', 'intermediate', 'advanced']
-    if user_data['experience_level'] not in valid_levels:
-        raise ValueError(f"experience_level must be one of: {', '.join(valid_levels)}")
+    if user_data['experience_level'] not in DIFFICULTY_LEVELS:
+        raise ValueError(f"experience_level must be one of: {', '.join(DIFFICULTY_LEVELS)}")
 
-    valid_workout_durations = [15, 30, 45, 60]
-    if user_data['workout_duration'] not in valid_workout_durations:
-        raise ValueError(f"workout_duration must be one of: {valid_workout_durations}")
+    if user_data['workout_duration'] not in WORKOUT_DURATIONS:
+        raise ValueError(f"workout_duration must be one of: {WORKOUT_DURATIONS}")
 
     # Validate date_range
     if not isinstance(user_data['date_range'], list) or len(user_data['date_range']) != 7:
@@ -34,19 +67,294 @@ def validate_user_data(user_data: Dict) -> None:
 
 
 def add_minutes(time, minutes):
-    """Add minutes to a datetime object."""
+    """
+    Add minutes to a datetime object.
+
+    Args:
+        time: Datetime object
+        minutes: Number of minutes to add
+
+    Returns:
+        Datetime with added minutes
+    """
     return time + timedelta(minutes=minutes)
 
 
+def get_component_durations(total_workout_time: int) -> Dict[str, int]:
+    """
+    Calculate the duration for each workout component based on total workout time.
+
+    Args:
+        total_workout_time: Total workout duration in minutes
+
+    Returns:
+        Dictionary with duration for each component
+    """
+    workout_time = min(max(total_workout_time, min(WORKOUT_DURATIONS)), max(WORKOUT_DURATIONS))
+
+    durations = {
+        'warmup_time': DEFAULT_WARMUP_TIMES.get(workout_time, 5),
+        'breathwork_time': DEFAULT_BREATHWORK_TIMES.get(workout_time, 0),
+        'cooldown_time': DEFAULT_COOLDOWN_TIMES.get(workout_time, 5),
+        'meditation_time': DEFAULT_MEDITATION_TIMES.get(workout_time, 5),
+        'stretching_time': DEFAULT_STRETCHING_TIMES.get(workout_time, 0),
+        'max_exercises': DEFAULT_EXERCISE_COUNTS.get(workout_time, 2)
+    }
+
+    # Determine whether to include optional components
+    durations['include_stretching'] = durations['stretching_time'] > 0
+    durations['include_breathwork'] = durations['breathwork_time'] > 0
+
+    return durations
+
+
+def select_activity_with_seed(activities: List[Dict], seed_base: int, offset: int = 0) -> Optional[Dict]:
+    """
+    Select an activity using a consistent seed for reproducibility.
+
+    Args:
+        activities: List of activities to choose from
+        seed_base: Base value for the random seed
+        offset: Offset to add to seed_base for variation
+
+    Returns:
+        Selected activity or None if list is empty
+    """
+    if not activities or len(activities) == 0:
+        return None
+
+    # Use the seed for consistent but varied selection
+    random.seed(seed_base + offset)
+    activity = random.choice(activities)
+    random.seed()  # Reset random seed
+
+    return activity
+
+
+def prepare_warmup_component(warmups: List[Dict], seed_base: int, warmup_time: int) -> Optional[Dict]:
+    """
+    Prepare a warm-up component for the workout schedule.
+
+    Args:
+        warmups: List of warm-up activities
+        seed_base: Base value for the random seed
+        warmup_time: Duration in minutes
+
+    Returns:
+        Dictionary with warm-up activity and duration, or None
+    """
+    warmup = select_activity_with_seed(warmups, seed_base, 0)
+    if not warmup:
+        return None
+
+    return {
+        'activity': {
+            '_id': warmup.get('_id'),
+            'name': warmup.get('name', 'Warm-Up'),
+            'phases': warmup.get('phases', []),
+            'instructions': warmup.get('instructions', []),
+            'benefits': warmup.get('benefits', []),
+            'target_areas': warmup.get('target_areas', []),
+            'type': 'warm_up',
+            'equipment_needed': warmup.get('equipment_needed', 'None'),
+            'target_heart_rate': warmup.get('target_heart_rate', '')
+        },
+        'duration': warmup_time
+    }
+
+
+def prepare_breathwork_component(breathwork_list: List[Dict], seed_base: int, breathwork_time: int) -> Optional[Dict]:
+    """
+    Prepare a breathwork component for the workout schedule.
+
+    Args:
+        breathwork_list: List of breathwork activities
+        seed_base: Base value for the random seed
+        breathwork_time: Duration in minutes
+
+    Returns:
+        Dictionary with breathwork activity and duration, or None
+    """
+    breath = select_activity_with_seed(breathwork_list, seed_base, 1)
+    if not breath:
+        return None
+
+    return {
+        'activity': {
+            '_id': breath.get('_id'),
+            'name': breath.get('name', 'Breathwork'),
+            'steps': breath.get('steps', []),
+            'instructions': breath.get('instructions', []),
+            'benefits': breath.get('benefits', []),
+            'type': 'breathwork'
+        },
+        'duration': breathwork_time
+    }
+
+
+def prepare_exercise_components(
+        exercises: List[Dict],
+        time_per_exercise: int,
+        difficulty_level: str,
+        max_count: int
+) -> List[Dict]:
+    """
+    Prepare exercise components for the workout schedule.
+
+    Args:
+        exercises: List of exercise activities
+        time_per_exercise: Duration in minutes per exercise
+        difficulty_level: User's experience level
+        max_count: Maximum number of exercises to include
+
+    Returns:
+        List of dictionaries with exercise activities and durations
+    """
+    result = []
+    exercise_count = min(len(exercises), max_count)
+
+    for ex in exercises[:exercise_count]:
+        # If the specific difficulty level isn't available, try to fall back
+        effective_level = difficulty_level
+        if effective_level not in ex.get('difficulty_levels', {}):
+            if 'intermediate' in ex.get('difficulty_levels', {}) and effective_level == 'advanced':
+                effective_level = 'intermediate'
+            elif 'beginner' in ex.get('difficulty_levels', {}):
+                effective_level = 'beginner'
+            else:
+                effective_level = next(iter(ex.get('difficulty_levels', {}).keys()), None)
+
+        if effective_level:
+            result.append({
+                'activity': {
+                    '_id': ex.get('_id'),
+                    'name': ex.get('name', 'Unnamed Exercise'),
+                    'exercises': [{
+                        'name': ex.get('name', 'Unnamed Exercise'),
+                        'form_cues': ex.get('form_cues', []),
+                        'sets': ex['difficulty_levels'][effective_level].get('sets', 'N/A'),
+                        'reps': ex['difficulty_levels'][effective_level].get('reps', 'N/A'),
+                        'target_muscles': ex.get('target_muscles', [])
+                    }],
+                    'type': 'exercise'
+                },
+                'duration': time_per_exercise
+            })
+
+    return result
+
+
+def prepare_stretching_component(stretching_list: List[Dict], seed_base: int, stretching_time: int) -> Optional[Dict]:
+    """
+    Prepare a stretching component for the workout schedule.
+
+    Args:
+        stretching_list: List of stretching activities
+        seed_base: Base value for the random seed
+        stretching_time: Duration in minutes
+
+    Returns:
+        Dictionary with stretching activity and duration, or None
+    """
+    stretch = select_activity_with_seed(stretching_list, seed_base, 2)
+    if not stretch:
+        return None
+
+    return {
+        'activity': {
+            '_id': stretch.get('_id'),
+            'name': stretch.get('name', 'Stretching'),
+            'sequence': stretch.get('sequence', []),
+            'instructions': stretch.get('instructions', []),
+            'benefits': stretch.get('benefits', []),
+            'target_areas': stretch.get('target_areas', []),
+            'type': 'stretching'
+        },
+        'duration': stretching_time
+    }
+
+
+def prepare_cooldown_component(cooldowns: List[Dict], seed_base: int, cooldown_time: int) -> Optional[Dict]:
+    """
+    Prepare a cool-down component for the workout schedule.
+
+    Args:
+        cooldowns: List of cool-down activities
+        seed_base: Base value for the random seed
+        cooldown_time: Duration in minutes
+
+    Returns:
+        Dictionary with cool-down activity and duration, or None
+    """
+    cooldown = select_activity_with_seed(cooldowns, seed_base, 3)
+    if not cooldown:
+        return None
+
+    return {
+        'activity': {
+            '_id': cooldown.get('_id'),
+            'name': cooldown.get('name', 'Cool-Down'),
+            'phases': cooldown.get('phases', []),
+            'instructions': cooldown.get('instructions', []),
+            'benefits': cooldown.get('benefits', []),
+            'target_areas': cooldown.get('target_areas', []),
+            'type': 'cool_down',
+            'equipment_needed': cooldown.get('equipment_needed', 'None'),
+            'target_heart_rate': cooldown.get('target_heart_rate', '')
+        },
+        'duration': cooldown_time
+    }
+
+
+def prepare_meditation_component(meditations: List[Dict], seed_base: int, meditation_time: int) -> Optional[Dict]:
+    """
+    Prepare a meditation component for the workout schedule.
+
+    Args:
+        meditations: List of meditation activities
+        seed_base: Base value for the random seed
+        meditation_time: Duration in minutes
+
+    Returns:
+        Dictionary with meditation activity and duration, or None
+    """
+    meditation = select_activity_with_seed(meditations, seed_base, 4)
+    if not meditation:
+        return None
+
+    return {
+        'activity': {
+            '_id': meditation.get('_id'),
+            'name': meditation.get('name', 'Meditation'),
+            'steps': meditation.get('steps', []),
+            'benefits': meditation.get('benefits', []),
+            'type': 'meditation'
+        },
+        'duration': meditation_time
+    }
+
+
 def create_day_schedule(user_data: Dict, collections: Dict, is_rest_day: bool, day_date: str) -> List[Dict]:
-    """Create a daily schedule by combining items from multiple collections."""
+    """
+    Create a daily schedule by combining items from multiple collections.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        is_rest_day: Boolean indicating if this is a rest day
+        day_date: Date string for the schedule
+
+    Returns:
+        List of activities for the day's schedule
+    """
     if is_rest_day:
         return []
 
-    daily_schedule = []
-    total_workout_time = user_data.get('workout_duration', 30)  # Default to 30 minutes
+    # Get workout duration parameters
+    total_workout_time = user_data.get('workout_duration', DEFAULT_WORKOUT_DURATION)
+    durations = get_component_durations(total_workout_time)
 
-    # Create empty schedule to fill in proper order
+    # Create schedule template to fill in proper order
     schedule_template = {
         'warm_up': None,
         'breathwork': None,
@@ -56,206 +364,90 @@ def create_day_schedule(user_data: Dict, collections: Dict, is_rest_day: bool, d
         'meditation': None
     }
 
-    # Adjust durations based on total workout time
-    # For shorter workouts, we need to make components more compact
-    if total_workout_time <= 15:
-        warmup_time = 4
-        breathwork_time = 0  # No breathwork for 15-minute workouts
-        cooldown_time = 4
-        meditation_time = 3
-        stretching_time = 0  # No stretching for 15-minute workouts
-        max_exercises = 2  # Increased to 2 exercises
-        include_stretching = False
-        include_breathwork = False
-    elif total_workout_time <= 30:
-        warmup_time = 5
-        breathwork_time = 3
-        cooldown_time = 5
-        meditation_time = 5
-        stretching_time = 0  # No stretching for 30-minute workouts
-        max_exercises = 2
-        include_stretching = False
-        include_breathwork = True
-    elif total_workout_time <= 45:  # 45 minutes
-        warmup_time = 5
-        breathwork_time = 5
-        cooldown_time = 5
-        meditation_time = 5
-        stretching_time = 0  # No stretching for 45-minute workouts either
-        max_exercises = 4  # Increased exercises instead of stretching
-        include_stretching = False
-        include_breathwork = True
-    else:  # 60 minutes
-        warmup_time = 7
-        breathwork_time = 5
-        cooldown_time = 7
-        meditation_time = 7
-        stretching_time = 10
-        max_exercises = 4
-        include_stretching = True
-        include_breathwork = True
-
     # Use day_date as seed for selections
     day_seed_base = sum(ord(c) for c in day_date)
 
-    # 1. Fetch Warm-Up - ensure variety by using day-based selection
+    # 1. Fetch and prepare Warm-Up
     warmups = fetch_warm_ups(user_data, collections, day_date)
-    if warmups and len(warmups) > 0:
-        # Use the day date as a seed for consistent but varied selection
-        random.seed(day_seed_base)
-        warmup = random.choice(warmups)
-        random.seed()  # Reset random seed
+    if warmups:
+        schedule_template['warm_up'] = prepare_warmup_component(
+            warmups,
+            day_seed_base,
+            durations['warmup_time']
+        )
 
-        schedule_template['warm_up'] = {
-            'activity': {
-                '_id': warmup.get('_id'),
-                'name': warmup.get('name', 'Warm-Up'),
-                'phases': warmup.get('phases', []),  # Include full phases structure
-                'instructions': warmup.get('instructions', []),
-                'benefits': warmup.get('benefits', []),
-                'target_areas': warmup.get('target_areas', []),
-                'type': 'warm_up',
-                'equipment_needed': warmup.get('equipment_needed', 'None'),
-                'target_heart_rate': warmup.get('target_heart_rate', '')
-            },
-            'duration': warmup_time
-        }
-
-    # 2. Fetch Breathwork - ensure variety by using day-based selection
-    if include_breathwork:
+    # 2. Fetch and prepare Breathwork
+    if durations['include_breathwork']:
         breathwork = fetch_breathwork(user_data['experience_level'], collections, day_date)
-        if breathwork and len(breathwork) > 0:
-            # Use the day date as a seed for consistent but varied selection
-            random.seed(day_seed_base + 1)  # Add 1 to make it different from warmup seed
-            breath = random.choice(breathwork)
-            random.seed()  # Reset random seed
+        if breathwork:
+            schedule_template['breathwork'] = prepare_breathwork_component(
+                breathwork,
+                day_seed_base,
+                durations['breathwork_time']
+            )
 
-            schedule_template['breathwork'] = {
-                'activity': {
-                    '_id': breath.get('_id'),
-                    'name': breath.get('name', 'Breathwork'),
-                    'steps': breath.get('steps', []),
-                    'instructions': breath.get('instructions', []),
-                    'benefits': breath.get('benefits', []),
-                    'type': 'breathwork'
-                },
-                'duration': breathwork_time
-            }
-
-    # 3. Fetch Main Exercises - ensure variety using day-based selection
+    # 3. Fetch and prepare Main Exercises
     main_exercises = fetch_exercises(user_data, collections, day_date)
-    # Calculate remaining time for main exercises after warm-up, breathwork
-    auxiliary_time = (warmup_time if schedule_template['warm_up'] else 0) + \
-                     (breathwork_time if schedule_template['breathwork'] else 0) + \
-                     cooldown_time + meditation_time + \
-                     (stretching_time if include_stretching else 0)
-    remaining_time = total_workout_time - auxiliary_time
 
-    # Limit number of exercises based on available time
-    exercise_count = min(len(main_exercises), max_exercises)
+    # Calculate remaining time for main exercises after other components
+    auxiliary_time = (
+            (durations['warmup_time'] if schedule_template['warm_up'] else 0) +
+            (durations['breathwork_time'] if schedule_template['breathwork'] else 0) +
+            durations['cooldown_time'] +
+            durations['meditation_time'] +
+            (durations['stretching_time'] if durations['include_stretching'] else 0)
+    )
+
+    remaining_time = total_workout_time - auxiliary_time
+    exercise_count = min(len(main_exercises), durations['max_exercises'])
+
     if exercise_count > 0:
         time_per_exercise = max(5, remaining_time // exercise_count)
-        for ex in main_exercises[:exercise_count]:
-            difficulty_level = user_data['experience_level']
-            # If the specific difficulty level isn't available, try to fall back
-            if difficulty_level not in ex.get('difficulty_levels', {}):
-                if 'intermediate' in ex.get('difficulty_levels', {}) and difficulty_level == 'advanced':
-                    difficulty_level = 'intermediate'
-                elif 'beginner' in ex.get('difficulty_levels', {}):
-                    difficulty_level = 'beginner'
-                else:
-                    difficulty_level = next(iter(ex.get('difficulty_levels', {}).keys()), None)
+        schedule_template['main_exercises'] = prepare_exercise_components(
+            main_exercises,
+            time_per_exercise,
+            user_data['experience_level'],
+            exercise_count
+        )
 
-            if difficulty_level:
-                schedule_template['main_exercises'].append({
-                    'activity': {
-                        '_id': ex.get('_id'),
-                        'name': ex.get('name', 'Unnamed Exercise'),
-                        'exercises': [{
-                            'name': ex.get('name', 'Unnamed Exercise'),
-                            'form_cues': ex.get('form_cues', []),
-                            'sets': ex['difficulty_levels'][difficulty_level].get('sets', 'N/A'),
-                            'reps': ex['difficulty_levels'][difficulty_level].get('reps', 'N/A'),
-                            'target_muscles': ex.get('target_muscles', [])
-                        }],
-                        'type': 'exercise'
-                    },
-                    'duration': time_per_exercise
-                })
-
-    # 4. Fetch Stretching - only for longer workouts
-    if include_stretching:
+    # 4. Fetch and prepare Stretching
+    if durations['include_stretching']:
         stretching = fetch_stretching(user_data, collections, day_date)
-        if stretching and len(stretching) > 0:
-            # Use the day date as a seed for consistent but varied selection
-            random.seed(day_seed_base + 2)  # Add 2 to make it different
-            stretch = random.choice(stretching)
-            random.seed()  # Reset random seed
+        if stretching:
+            schedule_template['stretching'] = prepare_stretching_component(
+                stretching,
+                day_seed_base,
+                durations['stretching_time']
+            )
 
-            schedule_template['stretching'] = {
-                'activity': {
-                    '_id': stretch.get('_id'),
-                    'name': stretch.get('name', 'Stretching'),
-                    'sequence': stretch.get('sequence', []),
-                    'instructions': stretch.get('instructions', []),
-                    'benefits': stretch.get('benefits', []),
-                    'target_areas': stretch.get('target_areas', []),
-                    'type': 'stretching'
-                },
-                'duration': stretching_time
-            }
-
-    # 5. Fetch Cool-down - ensure variety by using day-based selection
+    # 5. Fetch and prepare Cool-down
     cooldowns = fetch_cool_downs(user_data, collections, day_date)
-    if cooldowns and len(cooldowns) > 0:
-        # Use the day date as a seed for consistent but varied selection
-        random.seed(day_seed_base + 3)  # Add 3 to make it different
-        cooldown = random.choice(cooldowns)
-        random.seed()  # Reset random seed
+    if cooldowns:
+        schedule_template['cool_down'] = prepare_cooldown_component(
+            cooldowns,
+            day_seed_base,
+            durations['cooldown_time']
+        )
 
-        schedule_template['cool_down'] = {
-            'activity': {
-                '_id': cooldown.get('_id'),
-                'name': cooldown.get('name', 'Cool-Down'),
-                'phases': cooldown.get('phases', []),  # Include full phases structure
-                'instructions': cooldown.get('instructions', []),
-                'benefits': cooldown.get('benefits', []),
-                'target_areas': cooldown.get('target_areas', []),
-                'type': 'cool_down',
-                'equipment_needed': cooldown.get('equipment_needed', 'None'),
-                'target_heart_rate': cooldown.get('target_heart_rate', '')
-            },
-            'duration': cooldown_time
-        }
-
-    # 6. Fetch Meditation - ensure variety by using day-based selection
+    # 6. Fetch and prepare Meditation
     meditations = fetch_meditations(user_data['experience_level'], collections, day_date)
-    if meditations and len(meditations) > 0:
-        # Use the day date as a seed for consistent but varied selection
-        random.seed(day_seed_base + 4)  # Add 4 to make it different
-        meditation = random.choice(meditations)
-        random.seed()  # Reset random seed
-
-        duration = meditation.get('duration_minutes', {})
-        if isinstance(duration, dict):
-            duration = duration.get('short', 10)
-        schedule_template['meditation'] = {
-            'activity': {
-                '_id': meditation.get('_id'),
-                'name': meditation.get('name', 'Meditation'),
-                'steps': meditation.get('steps', []),
-                'benefits': meditation.get('benefits', []),
-                'type': 'meditation'
-            },
-            'duration': meditation_time
-        }
+    if meditations:
+        schedule_template['meditation'] = prepare_meditation_component(
+            meditations,
+            day_seed_base,
+            durations['meditation_time']
+        )
 
     # Build final schedule in correct order
+    daily_schedule = []
+
     if schedule_template['warm_up']:
         daily_schedule.append(schedule_template['warm_up'])
     if schedule_template['breathwork']:
         daily_schedule.append(schedule_template['breathwork'])
+
     daily_schedule.extend(schedule_template['main_exercises'])
+
     if schedule_template['stretching']:
         daily_schedule.append(schedule_template['stretching'])
     if schedule_template['cool_down']:
@@ -267,46 +459,67 @@ def create_day_schedule(user_data: Dict, collections: Dict, is_rest_day: bool, d
 
 
 def create_weekly_schedule(user_data: dict, collections: dict) -> dict:
-    """Create a weekly schedule based on user data and valid items from local DB."""
+    """
+    Create a weekly schedule based on user data and valid items from local DB.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+
+    Returns:
+        Dictionary with daily schedules for a week
+    """
     date_range = user_data.get('date_range', [])
     schedule = {}
 
     # Get preferred rest day from user data
     preferred_rest_day = user_data.get('preferred_rest_day')
 
-    for i, date in enumerate(date_range):
-        if date == preferred_rest_day:
-            schedule[date] = {
-                'type': 'Rest Day',
-                'schedule': []
-            }
-        else:
-            # Create daily schedule for this date
-            daily_schedule = create_day_schedule(
+    for date in date_range:
+        is_rest_day = date == preferred_rest_day
+        schedule[date] = {
+            'type': 'Rest Day' if is_rest_day else 'Workout Day',
+            'schedule': create_day_schedule(
                 user_data,
                 collections,
-                is_rest_day=(date == preferred_rest_day),
-                day_date=date
+                is_rest_day,
+                date
             )
-            schedule[date] = {
-                'type': 'Workout Day',
-                'schedule': daily_schedule
-            }
+        }
 
     return schedule
 
 
 def get_day_type(day_index: int, goals: List[str]) -> str:
-    """Return a default day type based on day index and goals."""
+    """
+    Return a default day type based on day index and goals.
+
+    Args:
+        day_index: Index of the day in the week
+        goals: List of fitness goals
+
+    Returns:
+        String indicating the day type
+    """
     if 'Muscle Gain' in goals:
         types = ['Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body']
     else:
         types = ['Full Body', 'Cardio', 'Strength', 'HIIT', 'Endurance']
+
     return types[day_index % len(types)]
 
 
 def generate_weekly_plan(user_data: Dict, collections: Dict) -> Dict:
-    """Generate a weekly holistic fitness plan."""
+    """
+    Generate a weekly holistic fitness plan based on user data.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+
+    Returns:
+        Complete weekly workout plan as a dictionary
+    """
     validate_user_data(user_data)
 
     # Generate the weekly schedule
@@ -327,7 +540,16 @@ def generate_weekly_plan(user_data: Dict, collections: Dict) -> Dict:
 
 
 def calculate_bmi(weight: float, height: float) -> float:
-    """Calculate BMI from weight (kg) and height (cm)."""
+    """
+    Calculate BMI from weight (kg) and height (cm).
+
+    Args:
+        weight: Weight in kilograms
+        height: Height in centimeters
+
+    Returns:
+        BMI value as a float
+    """
     height_m = height / 100
     return weight / (height_m * height_m)
 
@@ -336,9 +558,15 @@ def map_goals_to_valid_tags(goals: list) -> dict:
     """
     Map fitness goals to valid tags for each collection.
 
-    Available fitness goals:
-      ["Flexibility", "Better Mental Health", "Stress Resilience", "General Fitness", "Weight Loss", "Muscle Gain"]
+    Args:
+        goals: List of fitness goals
+            Available goals: ["Flexibility", "Better Mental Health", "Stress Resilience",
+                            "General Fitness", "Weight Loss", "Muscle Gain"]
+
+    Returns:
+        Dictionary mapping collections to lists of relevant tags
     """
+    # Define the mappings from goals to tags for each collection
     mapping = {
         "exercises": {
             "Muscle Gain": ["push", "upper-body", "compound", "strength"],
@@ -390,7 +618,7 @@ def map_goals_to_valid_tags(goals: list) -> dict:
         }
     }
 
-    # Every collection should have a fallback for all goals
+    # Define default tags for each collection as a fallback
     DEFAULT_TAGS = {
         "exercises": ["functional", "bodyweight", "compound", "general"],
         "breathwork": ["recovery", "relaxation"],
@@ -400,6 +628,7 @@ def map_goals_to_valid_tags(goals: list) -> dict:
         "warm_ups": ["general", "foundational"]
     }
 
+    # Build the result dictionary
     result = {}
     for collection, goal_map in mapping.items():
         tags = []
@@ -419,47 +648,65 @@ def map_goals_to_valid_tags(goals: list) -> dict:
     return result
 
 
-# Fetch functions for each collection
+# Shared helper function for fetch operations
+def execute_query_with_fallbacks(collection, queries, limit=5):
+    """
+    Execute a series of MongoDB queries, falling back to the next if no results.
+
+    Args:
+        collection: MongoDB collection to query
+        queries: List of queries to try in order
+        limit: Maximum number of results to return
+
+    Returns:
+        List of documents matching the first successful query
+    """
+    for query in queries:
+        results = list(collection.find(query).limit(limit))
+        if results:
+            return results
+
+    # Last resort - get any documents
+    return list(collection.find().limit(limit))
+
 
 def fetch_exercises(user_data: dict, collections: dict, day_date: str = None) -> list:
     """
-    Fetch exercises from the 'exercises' collection,
-    filtered by valid tags derived from the user's fitness goals.
+    Fetch exercises from the 'exercises' collection, filtered by user's fitness goals.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for consistent randomization
+
+    Returns:
+        List of exercise documents
     """
     mapping = map_goals_to_valid_tags(user_data['fitness_goals'])
     valid_tags = mapping.get("exercises", [])
     level = user_data['experience_level']
 
-    # Try with specific difficulty level first
-    query = {
-        'tags': {'$in': valid_tags},
-        f'difficulty_levels.{level}': {'$exists': True}
-    }
-    exercises = list(collections['exercises'].find(query))
+    # Build queries with fallbacks
+    queries = [
+        # Try with specific difficulty level first
+        {'tags': {'$in': valid_tags}, f'difficulty_levels.{level}': {'$exists': True}},
 
-    # If no exercises found, try fallback to other levels
-    if not exercises and level == 'advanced':
-        query = {
-            'tags': {'$in': valid_tags},
-            'difficulty_levels.intermediate': {'$exists': True}
-        }
-        exercises = list(collections['exercises'].find(query))
+        # Fallback to intermediate if advanced
+        {'tags': {'$in': valid_tags}, 'difficulty_levels.intermediate': {'$exists': True}}
+        if level == 'advanced' else None,
 
-    if not exercises and (level == 'advanced' or level == 'intermediate'):
-        query = {
-            'tags': {'$in': valid_tags},
-            'difficulty_levels.beginner': {'$exists': True}
-        }
-        exercises = list(collections['exercises'].find(query))
+        # Fallback to beginner if advanced/intermediate
+        {'tags': {'$in': valid_tags}, 'difficulty_levels.beginner': {'$exists': True}}
+        if level in ['advanced', 'intermediate'] else None,
 
-    # If still no exercises, try without tag filtering
-    if not exercises:
-        query = {f'difficulty_levels.{level}': {'$exists': True}}
-        exercises = list(collections['exercises'].find(query))
+        # Try without tag filtering
+        {f'difficulty_levels.{level}': {'$exists': True}}
+    ]
 
-    # Last resort - get any exercises
-    if not exercises:
-        exercises = list(collections['exercises'].find().limit(5))
+    # Remove None queries
+    queries = [q for q in queries if q is not None]
+
+    exercises = execute_query_with_fallbacks(collections['exercises'], queries)
 
     if not exercises:
         return []
@@ -479,77 +726,105 @@ def fetch_exercises(user_data: dict, collections: dict, day_date: str = None) ->
 
 
 def fetch_breathwork(level: str, collections: Dict, day_date: str = None) -> List[Dict]:
-    """Fetch breathwork techniques based on level."""
+    """
+    Fetch breathwork techniques based on difficulty level.
+
+    Args:
+        level: User's experience level
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
+
+    Returns:
+        List of breathwork documents
+    """
     # Include day in cache key for variety across days
     cache_key = f"breathwork_{level}_{day_date}" if day_date else f"breathwork_{level}"
 
     if cache_key in template_cache:
         return template_cache[cache_key]
 
-    # Try with exact level first
-    query = {'difficulty': level, 'recommended_use.pre_workout': True}
-    techniques = list(collections['breathwork'].find(query))
+    # Build queries with fallbacks
+    queries = [
+        # Try with exact level first
+        {'difficulty': level, 'recommended_use.pre_workout': True},
 
-    # If no results for advanced, try intermediate
-    if not techniques and level == 'advanced':
-        query = {'difficulty': 'intermediate', 'recommended_use.pre_workout': True}
-        techniques = list(collections['breathwork'].find(query))
+        # Fallback to intermediate if advanced
+        {'difficulty': 'intermediate', 'recommended_use.pre_workout': True}
+        if level == 'advanced' else None,
 
-    # If still no results, try beginner
-    if not techniques and (level == 'advanced' or level == 'intermediate'):
-        query = {'difficulty': 'beginner', 'recommended_use.pre_workout': True}
-        techniques = list(collections['breathwork'].find(query))
+        # Fallback to beginner if advanced/intermediate
+        {'difficulty': 'beginner', 'recommended_use.pre_workout': True}
+        if level in ['advanced', 'intermediate'] else None,
 
-    # If still nothing, try without pre_workout filter
-    if not techniques:
-        query = {'difficulty': {'$in': ['beginner', 'intermediate', 'advanced']}}
-        techniques = list(collections['breathwork'].find(query))
+        # Try without pre_workout filter
+        {'difficulty': {'$in': ['beginner', 'intermediate', 'advanced']}}
+    ]
 
-    # If still nothing, get anything
-    if not techniques:
-        techniques = list(collections['breathwork'].find().limit(3))
+    # Remove None queries
+    queries = [q for q in queries if q is not None]
+
+    techniques = execute_query_with_fallbacks(collections['breathwork'], queries, 3)
 
     template_cache[cache_key] = techniques
     return techniques
 
 
 def fetch_meditations(level: str, collections: Dict, day_date: str = None) -> List[Dict]:
-    """Fetch meditation templates based on level."""
+    """
+    Fetch meditation templates based on difficulty level.
+
+    Args:
+        level: User's experience level
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
+
+    Returns:
+        List of meditation documents
+    """
     # Include day in cache key for variety across days
     cache_key = f"meditation_{level}_{day_date}" if day_date else f"meditation_{level}"
 
     if cache_key in template_cache:
         return template_cache[cache_key]
 
-    # Try with exact level first
-    query = {'difficulty': level, 'duration_minutes.short': {'$lte': 15}}
-    meditations = list(collections['meditation'].find(query))
+    # Build queries with fallbacks
+    queries = [
+        # Try with exact level first
+        {'difficulty': level, 'duration_minutes.short': {'$lte': 15}},
 
-    # If no results for advanced, try intermediate
-    if not meditations and level == 'advanced':
-        query = {'difficulty': 'intermediate', 'duration_minutes.short': {'$lte': 15}}
-        meditations = list(collections['meditation'].find(query))
+        # Fallback to intermediate if advanced
+        {'difficulty': 'intermediate', 'duration_minutes.short': {'$lte': 15}}
+        if level == 'advanced' else None,
 
-    # If still no results, try beginner
-    if not meditations and (level == 'advanced' or level == 'intermediate'):
-        query = {'difficulty': 'beginner', 'duration_minutes.short': {'$lte': 15}}
-        meditations = list(collections['meditation'].find(query))
+        # Fallback to beginner if advanced/intermediate
+        {'difficulty': 'beginner', 'duration_minutes.short': {'$lte': 15}}
+        if level in ['advanced', 'intermediate'] else None,
 
-    # If still nothing, try without duration filter
-    if not meditations:
-        query = {'difficulty': {'$in': ['beginner', 'intermediate', 'advanced']}}
-        meditations = list(collections['meditation'].find(query))
+        # Try without duration filter
+        {'difficulty': {'$in': ['beginner', 'intermediate', 'advanced']}}
+    ]
 
-    # If still nothing, get anything
-    if not meditations:
-        meditations = list(collections['meditation'].find().limit(3))
+    # Remove None queries
+    queries = [q for q in queries if q is not None]
+
+    meditations = execute_query_with_fallbacks(collections['meditation'], queries, 3)
 
     template_cache[cache_key] = meditations
     return meditations
 
 
 def fetch_stretching(user_data: Dict, collections: Dict, day_date: str = None) -> List[Dict]:
-    """Fetch stretching routines based on user data."""
+    """
+    Fetch stretching routines based on user data.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
+
+    Returns:
+        List of stretching documents
+    """
     level = user_data['experience_level']
 
     # Include day in cache key for variety across days
@@ -562,139 +837,139 @@ def fetch_stretching(user_data: Dict, collections: Dict, day_date: str = None) -
     # Get tags from goals
     tags = map_goals_to_valid_tags(user_data['fitness_goals']).get("stretching", [])
 
-    # Try with exact level and tags first
-    query = {'difficulty': level, 'tags': {'$in': tags}}
-    routines = list(collections['stretching'].find(query))
+    # Build queries with fallbacks
+    queries = [
+        # Try with exact level and tags first
+        {'difficulty': level, 'tags': {'$in': tags}},
 
-    # If no results, try with just the level
-    if not routines:
-        query = {'difficulty': level}
-        routines = list(collections['stretching'].find(query))
+        # Try with just the level
+        {'difficulty': level},
 
-    # If still no results and level is advanced, try intermediate
-    if not routines and level == 'advanced':
-        query = {'difficulty': 'intermediate'}
-        routines = list(collections['stretching'].find(query))
+        # Fallback to intermediate if advanced
+        {'difficulty': 'intermediate'}
+        if level == 'advanced' else None,
 
-    # If still no results, try beginner
-    if not routines and (level == 'advanced' or level == 'intermediate'):
-        query = {'difficulty': 'beginner'}
-        routines = list(collections['stretching'].find(query))
+        # Fallback to beginner if advanced/intermediate
+        {'difficulty': 'beginner'}
+        if level in ['advanced', 'intermediate'] else None
+    ]
 
-    # Last resort - get any stretching routines
-    if not routines:
-        routines = list(collections['stretching'].find().limit(3))
+    # Remove None queries
+    queries = [q for q in queries if q is not None]
+
+    routines = execute_query_with_fallbacks(collections['stretching'], queries, 3)
 
     template_cache[cache_key] = routines
     return routines
 
 
-def fetch_warm_ups(user_data: Dict, collections: Dict, day_date: str = None) -> List[Dict]:
-    """Fetch warm-up routines based on user data."""
+def fetch_routine_by_level_and_tags(collection_name: str, user_data: Dict,
+                                    collections: Dict, day_date: str = None,
+                                    limit: int = 3) -> List[Dict]:
+    """
+    Generic function to fetch routines from collections based on user level and tags.
+
+    Args:
+        collection_name: Name of the collection to fetch from ('warm_ups', 'cool_downs', etc.)
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
+        limit: Maximum number of items to return
+
+    Returns:
+        List of matching documents from the specified collection
+    """
     level = user_data['experience_level']
 
     # Include day in cache key for variety across days
-    cache_key = (f"warm_ups_{level}_{'-'.join(sorted(user_data['fitness_goals']))}_{day_date}"
-                 if day_date else f"warm_ups_{level}_{'-'.join(sorted(user_data['fitness_goals']))}")
+    sorted_goals = '-'.join(sorted(user_data.get('fitness_goals', [])))
+    cache_key = (f"{collection_name}_{level}_{sorted_goals}_{day_date}"
+                 if day_date else f"{collection_name}_{level}_{sorted_goals}")
 
     if cache_key in template_cache:
         return template_cache[cache_key]
 
     # Get tags from goals
-    tags = map_goals_to_valid_tags(user_data['fitness_goals']).get("warm_ups", [])
+    tags = map_goals_to_valid_tags(user_data.get('fitness_goals', [])).get(collection_name, [])
 
-    # Try with tags and difficulty level first
-    query = {
-        'tags': {'$in': tags},
-        f'difficulty_levels.{level}': {'$exists': True}
-    }
-    warmups = list(collections['warm_ups'].find(query))
+    # Build queries with fallbacks
+    queries = [
+        # Try with tags and difficulty level first
+        {'tags': {'$in': tags}, f'difficulty_levels.{level}': {'$exists': True}},
 
-    # If no results, try with just the tags
-    if not warmups:
-        query = {'tags': {'$in': tags}}
-        warmups = list(collections['warm_ups'].find(query))
+        # Try with just the tags
+        {'tags': {'$in': tags}},
 
-    # If still no results, try with just the difficulty level
-    if not warmups:
-        query = {f'difficulty_levels.{level}': {'$exists': True}}
-        warmups = list(collections['warm_ups'].find(query))
+        # Try with just the difficulty level
+        {f'difficulty_levels.{level}': {'$exists': True}},
 
-    # If still no results for advanced, try intermediate
-    if not warmups and level == 'advanced':
-        query = {'difficulty_levels.intermediate': {'$exists': True}}
-        warmups = list(collections['warm_ups'].find(query))
+        # Fallback to intermediate if advanced
+        {'difficulty_levels.intermediate': {'$exists': True}}
+        if level == 'advanced' else None,
 
-    # If still no results, try beginner
-    if not warmups and (level == 'advanced' or level == 'intermediate'):
-        query = {'difficulty_levels.beginner': {'$exists': True}}
-        warmups = list(collections['warm_ups'].find(query))
+        # Fallback to beginner if advanced/intermediate
+        {'difficulty_levels.beginner': {'$exists': True}}
+        if level in ['advanced', 'intermediate'] else None
+    ]
 
-    # Last resort - get any warm-ups
-    if not warmups:
-        warmups = list(collections['warm_ups'].find().limit(3))
+    # Remove None queries
+    queries = [q for q in queries if q is not None]
 
-    template_cache[cache_key] = warmups
-    return warmups
+    results = execute_query_with_fallbacks(collections[collection_name], queries, limit)
+
+    template_cache[cache_key] = results
+    return results
+
+
+def fetch_warm_ups(user_data: Dict, collections: Dict, day_date: str = None) -> List[Dict]:
+    """
+    Fetch warm-up routines based on user data.
+
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
+
+    Returns:
+        List of warm-up documents
+    """
+    return fetch_routine_by_level_and_tags('warm_ups', user_data, collections, day_date)
 
 
 def fetch_cool_downs(user_data: Dict, collections: Dict, day_date: str = None) -> List[Dict]:
-    """Fetch cool-down routines based on user data."""
-    level = user_data['experience_level']
+    """
+    Fetch cool-down routines based on user data.
 
-    # Include day in cache key for variety across days
-    cache_key = (f"cool_downs_{level}_{'-'.join(sorted(user_data['fitness_goals']))}_{day_date}"
-                 if day_date else f"cool_downs_{level}_{'-'.join(sorted(user_data['fitness_goals']))}")
+    Args:
+        user_data: Dictionary with user preferences
+        collections: Dictionary of MongoDB collections
+        day_date: Date string for cache key and randomization
 
-    if cache_key in template_cache:
-        return template_cache[cache_key]
-
-    # Get tags from goals
-    tags = map_goals_to_valid_tags(user_data['fitness_goals']).get("cool_downs", [])
-
-    # Try with tags and difficulty level first
-    query = {
-        'tags': {'$in': tags},
-        f'difficulty_levels.{level}': {'$exists': True}
-    }
-    cooldowns = list(collections['cool_downs'].find(query))
-
-    # If no results, try with just the tags
-    if not cooldowns:
-        query = {'tags': {'$in': tags}}
-        cooldowns = list(collections['cool_downs'].find(query))
-
-    # If still no results, try with just the difficulty level
-    if not cooldowns:
-        query = {f'difficulty_levels.{level}': {'$exists': True}}
-        cooldowns = list(collections['cool_downs'].find(query))
-
-    # If still no results for advanced, try intermediate
-    if not cooldowns and level == 'advanced':
-        query = {'difficulty_levels.intermediate': {'$exists': True}}
-        cooldowns = list(collections['cool_downs'].find(query))
-
-    # If still no results, try beginner
-    if not cooldowns and (level == 'advanced' or level == 'intermediate'):
-        query = {'difficulty_levels.beginner': {'$exists': True}}
-        cooldowns = list(collections['cool_downs'].find(query))
-
-    # Last resort - get any cool-downs
-    if not cooldowns:
-        cooldowns = list(collections['cool_downs'].find().limit(3))
-
-    template_cache[cache_key] = cooldowns
-    return cooldowns
+    Returns:
+        List of cool-down documents
+    """
+    return fetch_routine_by_level_and_tags('cool_downs', user_data, collections, day_date)
 
 
 def prioritize_exercises(exercises: List[Dict], goals: List[str]) -> List[Dict]:
-    """Randomly select and prioritize a balanced set of exercises."""
+    """
+    Randomly select and prioritize a balanced set of exercises.
+
+    Args:
+        exercises: List of exercise documents
+        goals: List of fitness goals
+
+    Returns:
+        Prioritized list of exercises
+    """
     selected = []
     exercise_types = set()
+
     for ex in sorted(exercises, key=lambda _: random.random()):
         ex_type = next((tag for tag in ex['tags'] if tag in ['push', 'pull', 'legs', 'core']), None)
         if len(selected) < 5 and (not ex_type or ex_type not in exercise_types):
             selected.append(ex)
             if ex_type:
                 exercise_types.add(ex_type)
+
     return selected[:5]

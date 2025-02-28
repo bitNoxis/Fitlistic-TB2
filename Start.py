@@ -1,3 +1,12 @@
+"""
+Fitlistic Application - Main Entry Point
+
+This serves as the entry point for the Fitlistic application.
+It handles initial page configuration and authentication redirection.
+If users are not authenticated, they are sent to the login page;
+otherwise, they are directed to the main overview page.
+"""
+
 import streamlit as st
 
 # Configure the main page settings

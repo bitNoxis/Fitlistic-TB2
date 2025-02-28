@@ -1,4 +1,14 @@
+"""
+Login Page
+
+This module handles user authentication through a login form, allowing
+existing users to authenticate and access the application. New users
+can navigate to the registration page.
+"""
+
 import streamlit as st
+
+from utils.app_style import apply_auth_page_styling
 from utils.mongo_helper import validate_login
 from utils.auth_helper import init_auth
 
@@ -13,31 +23,8 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-st.markdown("""
-    <style>
-        /* Hide sidebar navigation */
-        div[data-testid="stSidebarNav"] {display: none !important;}
-
-        /* Hide menu button */
-        button[kind="header"] {display: none !important;}
-
-        /* Hide hamburger menu */
-        .stApp > header {display: none !important;}
-
-        /* Hide Streamlit footer */
-        footer {display: none !important;}
-
-        /* Hide all navigation elements */
-        .stDeployButton {display: none !important;}
-        section[data-testid="stSidebar"] {display: none !important;}
-
-        /* Hide full-screen button */
-        [data-testid="stElementToolbar"] {
-        display: none !important;
-        }
-       
-    </style>
-""", unsafe_allow_html=True)
+# Apply custom styles
+apply_auth_page_styling()
 
 # If already authenticated, redirect to overview
 if st.session_state.is_authenticated:
@@ -48,13 +35,18 @@ colA, colB, colC = st.columns([1, 2, 1])
 with colB:
     try:
         st.image("images/Logo.png", width=120, use_container_width=True)
-    except:
+    except FileNotFoundError:
+        # Fallback if image is not found
         st.title("Fitlistic")
+    except Exception as e:
+        # Handle any other exceptions with image loading
+        st.title("Fitlistic")
+        print(f"Error loading logo: {e}")
 
     st.markdown("<h1 style='text-align: center; font-size: 2rem;'>Welcome Back</h1>",
                 unsafe_allow_html=True)
 
-# Add some spacing
+# Add spacing for better layout
 st.write("")
 
 # Login Container
@@ -75,7 +67,7 @@ with st.container():
             else:
                 success, user = validate_login(username, password)
 
-                if success and user is not None:  # Explizit auf None prüfen
+                if success and user is not None:  # Explicitly check for None
                     st.session_state.user = user
                     st.session_state.is_authenticated = True
                     st.success("Login successful! Redirecting...")
