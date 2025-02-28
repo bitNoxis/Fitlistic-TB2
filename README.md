@@ -1,0 +1,23 @@
+# Fitlistic
+
+**Deployed App:** [https://fitlistic.streamlit.app/](https://fitlistic.streamlit.app/)  
+**Project Report:** [project-report.pdf](./project-report.pdf)
+
+---
+
+## About the Project
+
+Fitlistic is a comprehensive, **holistic fitness** web application designed to guide users through tailored workout plans, track their well-being, and encourage healthy habits. It integrates features such as workout logging, mood tracking, and activity analytics to help users stay accountable and consistent on their fitness journeys.
+
+### Built With
+- **Streamlit** – For creating interactive Python web apps  
+- **MongoDB** – For storing user data (workouts, well-being scores, logs)  
+- **Plotly** – For dynamic charts and data visualizations  
+- **Python** – Core application logic and authentication  
+
+---
+
+## License
+
+Distributed under the [MIT License](./LICENSE).  
+Feel free to use, modify, and distribute within the license terms.
