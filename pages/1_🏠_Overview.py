@@ -66,66 +66,6 @@ def get_user_streak(user_id):
     return streak
 
 
-def get_activity_heatmap_data(user_id):
-    collection = get_collection("fitlistic", "workout_logs")
-    if collection is None:
-        return []
-
-    # Get start and end of current month
-    now = datetime.now(timezone.utc)
-    year, month = now.year, now.month
-
-    _, last_day = calendar.monthrange(year, month)
-    start_date = datetime(year, month, 1, tzinfo=timezone.utc)
-    end_date = datetime(year, month, last_day, 23, 59, 59, tzinfo=timezone.utc)
-
-    # Get all workouts for the month
-    workouts = list(collection.find({
-        "user_id": ObjectId(user_id),
-        "date": {"$gte": start_date, "$lte": end_date}
-    }))
-
-    # Create date to count mapping
-    workout_data = {}
-    for workout in workouts:
-        date_str = workout["date"].strftime("%Y-%m-%d")
-        if date_str in workout_data:
-            workout_data[date_str]["count"] += 1
-            workout_data[date_str]["duration"] += workout.get("total_duration_minutes", 0)
-            workout_data[date_str]["calories"] += workout.get("total_calories_burned", 0)
-        else:
-            workout_data[date_str] = {
-                "count": 1,
-                "duration": workout.get("total_duration_minutes", 0),
-                "calories": workout.get("total_calories_burned", 0)
-            }
-
-    # Create full date range for the month
-    all_dates = []
-    for day in range(1, last_day + 1):
-        date_obj = datetime(year, month, day, tzinfo=timezone.utc)
-        date_str = date_obj.strftime("%Y-%m-%d")
-
-        if date_str in workout_data:
-            all_dates.append({
-                "date": date_str,
-                "day": day,
-                "count": workout_data[date_str]["count"],
-                "duration": workout_data[date_str]["duration"],
-                "calories": workout_data[date_str]["calories"]
-            })
-        else:
-            all_dates.append({
-                "date": date_str,
-                "day": day,
-                "count": 0,
-                "duration": 0,
-                "calories": 0
-            })
-
-    return all_dates
-
-
 @auth_required
 def overview_page():
     st.set_page_config(page_title="Overview", page_icon="🏠", layout="centered")
@@ -138,6 +78,10 @@ def overview_page():
     else:
         user_name = "Friend"
     st.title(f"Great to see you, {user_name}! 😊")
+
+    with st.sidebar:
+        st.header(f"Quick Options")
+        handle_sidebar_buttons()
 
     # ------------------- Well-Being Progress Graph -------------------
     st.header("Your Well-Being Progress")
@@ -257,22 +201,6 @@ def overview_page():
                 except Exception as e:
                     st.error(f"Error logging mood: {e}")
 
-    # ------------------- Quick Start Section -------------------
-    st.header("Quick Options")
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("Today's Workout", type="primary", key="today_workout"):
-            st.switch_page("pages/2_💪_Exercise.py")
-
-    with col2:
-        if st.button("Do a one time workout", type="primary", key="try"):
-            st.switch_page("pages/4_✨_AI-Coach.py")
-
-    with col3:
-        if st.button("Get a full 7 day workout plan", type="primary", key="upperbody"):
-            st.switch_page("pages/5_📋_Workout-Creator.py")
-
     # ------------------- Enhanced Weekly Progress Section -------------------
     st.header("Your Fitness Stats")
 
@@ -348,6 +276,15 @@ def overview_page():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("images/Finish.png", width=300)
+
+
+def handle_sidebar_buttons():
+    if st.button("Today's Workout", type="primary", key="today_workout"):
+        st.switch_page("pages/2_💪_Exercise.py")
+    if st.button("Do a one time workout", type="primary", key="try"):
+        st.switch_page("pages/4_✨_AI-Coach.py")
+    if st.button("Get a full 7 day workout plan", type="secondary", key="upperbody"):
+        st.switch_page("pages/5_📋_Workout-Creator.py")
 
 
 overview_page()
