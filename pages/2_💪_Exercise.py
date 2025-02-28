@@ -217,7 +217,7 @@ def handle_missing_workout(active_plan, current_date):
     Returns:
         None
     """
-    st.error(f"No workout found for {format_date_for_display(current_date)}.")
+    st.info(f"You changed your holistic fitness plan Here you can activate it.")
 
     if active_plan and 'schedule' in active_plan:
         st.write("Let's find a valid workout day for you:")
@@ -229,7 +229,7 @@ def handle_missing_workout(active_plan, current_date):
             col1, col2 = st.columns(2)
 
             with col1:
-                if st.button("Go to First Day", use_container_width=True):
+                if st.button("Load the new Workout Plan", use_container_width=True):
                     st.session_state.viewed_date = date_keys[0]
                     st.query_params["date"] = date_keys[0]
                     st.rerun()
